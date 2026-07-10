@@ -1,0 +1,31 @@
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# macOS
+.DS_Store
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+
+# Java / Gradle
+.gradle/
+build/
+**/build/
+out/
+
+# Node
+node_modules/
+dist/
+coverage/
+*.log
+
+# Local runtime data
+data/
+uploads/
+tmp/
