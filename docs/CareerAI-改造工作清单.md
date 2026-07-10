@@ -30,7 +30,7 @@
 | RAG 知识库 | 文档上传、分块、pgvector、TopK/阈值检索、SSE | 高复用；增加用户级数据隔离、岗位和简历元数据过滤、引用来源 |
 | AI 接入 | Spring AI ChatClient、多 Provider、结构化输出重试、Prompt 模板 | 高复用；沉淀 CareerAI 专属 Prompt 和模型调用审计 |
 | 面试日程 | 邀请解析、日历与状态流转 | 可保留为 P2，不是首版核心 |
-| 基础设施 | PostgreSQL、Redis、MinIO/RustFS、Docker Compose | 高复用；按目标架构增加 MySQL、RabbitMQ、Nacos |
+| 基础设施 | PostgreSQL、Redis、MinIO/RustFS、本地 Docker 容器 | 高复用；按目标架构增加 MySQL、RabbitMQ、Nacos |
 | 前端 | React + TypeScript，多数业务页面已存在 | 复用组件和请求层，重做信息架构与 CareerAI 品牌 |
 
 ### 2.2 与目标简历描述的关键差距
@@ -51,7 +51,7 @@
 ### 2.3 已验证的工程基线
 
 - 后端约 177 个 Java 源文件、26 个测试文件、9 个 Controller、14 个 JPA Entity。
-- 使用本机 JDK 21 执行 `./gradlew :app:test --no-daemon`，后端测试通过。
+- 使用本机 JDK 21 执行 `mvn clean test`，后端测试通过。
 - 前端 TypeScript 检查当前不通过，包含 type-only import、`NodeJS` 类型、`react-syntax-highlighter` 声明和不兼容编译选项等问题。
 - 本地上游仓库工作区有未提交文件，且分支相对远端同时 ahead/behind；改造时不应直接在该工作区覆盖开发。
 - 上游采用 AGPL-3.0。发布网络服务时要保留许可证、标明修改并向用户提供对应源码。
@@ -135,10 +135,10 @@ flowchart TB
 - [ ] 在 README 中注明“基于 InterviewGuide 二次开发”、修改日期、核心新增能力和上游地址。
 - [ ] 检查 `.env`、历史提交和配置文件，确保没有真实 API Key、数据库密码或个人路径进入版本库。
 - [ ] 统一项目名、包名、容器名、数据库名、对象存储 Bucket、前端标题和图标为 CareerAI。
-- [ ] 固化 JDK、Node、pnpm、Gradle 版本，并生成一份环境启动说明。
+- [x] 固化 JDK、Node、pnpm、Maven 版本，并生成一份环境启动说明。
 - [ ] 修复前端 TypeScript 错误，确保前端 `pnpm build` 通过。
 - [ ] 保持后端测试通过，并增加统一的 `check`/CI 命令。
-- [ ] 用 Docker Compose 启动依赖，完成一次前后端基础冒烟测试。
+- [ ] 连接本地 Docker 中间件，完成一次前后端基础冒烟测试。
 - [ ] 决定 P0 暂时隐藏语音面试、面试日程和高级 Provider 设置，减少首版导航噪音。
 
 验收：新开发者仅根据 README 能在 30 分钟内启动项目；后端测试和前端构建均为绿色；仓库不存在密钥。
@@ -235,7 +235,7 @@ flowchart TB
 
 ### 阶段 7：微服务工程化拆分（P1）
 
-- [ ] 建立 Gradle 多模块父工程和统一依赖版本目录。
+- [x] 建立 Maven 多模块父工程和统一依赖版本管理。
 - [ ] 在实施前核对 Spring Boot、Spring Cloud、Spring Cloud Alibaba 与 Nacos 的官方兼容矩阵并锁定版本。
 - [ ] 先抽取 `gateway-service`、`user-service`，再按业务边界逐个迁移，避免一次性大爆炸拆分。
 - [ ] 接入 Nacos 服务注册与发现，并配置 dev/test/prod namespace/group。
@@ -246,7 +246,7 @@ flowchart TB
 - [ ] 禁止远程调用发生在长数据库事务中。
 - [ ] 服务间调用失败时返回明确降级结果，不吞异常、不伪造成功。
 - [ ] 每个服务有独立健康检查、OpenAPI、日志前缀和 Dockerfile。
-- [ ] Docker Compose 一键启动 Nacos、Gateway、各业务服务、MySQL、PostgreSQL、Redis、RabbitMQ 和对象存储。
+- [ ] 文档化 Nacos、Gateway、各业务服务与本地 Docker 中间件的启动和检查方式。
 - [ ] 仅 Gateway 暴露业务访问端口，其他服务放在内部网络。
 
 验收：关闭任意一个下游服务后，Gateway 和其他服务仍能给出可诊断的错误；Nacos 能看到健康实例；跨服务调用链带同一 Trace ID。
@@ -274,7 +274,7 @@ flowchart TB
 - [ ] 对对象存储使用私有 Bucket 和限时签名 URL，不再使用公共读。
 - [ ] 配置文件分环境，密钥不写入 Nacos 明文和 Git。
 - [ ] 为 AI、MQ、数据库、SSE 和 Feign 设置超时、连接池与资源上限。
-- [ ] 完成 Docker Compose 开发部署；若时间足够，再增加云服务器部署与 HTTPS。
+- [ ] 完成本地 Docker 中间件开发环境；若时间足够，再增加云服务器部署与 HTTPS。
 - [ ] 增加数据库和对象存储备份/恢复说明。
 
 验收：全新环境一条命令可启动；数据库迁移可重复执行；容器重启不丢数据；公共网络无法直接访问内部服务和数据库。

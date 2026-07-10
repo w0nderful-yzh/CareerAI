@@ -2,9 +2,9 @@
 
 面向大学生实习与校招场景的智能求职辅助和模拟面试平台。
 
-CareerAI 计划基于 [InterviewGuide](https://github.com/Snailclimb/interview-guide) 进行二次开发，围绕“简历、目标岗位和面试表现”建立完整的求职闭环，而不是仅对上游项目进行改名或界面换皮。
+CareerAI 基于 [InterviewGuide](https://github.com/Snailclimb/interview-guide) 进行二次开发，围绕“简历、目标岗位和面试表现”建立完整的求职闭环，而不是仅对上游项目进行改名或界面换皮。
 
-> 当前状态：项目规划阶段。已完成上游代码盘点、目标架构设计和改造任务拆分，业务代码尚未正式导入本仓库。
+> 当前状态：已从上游提交 `8c80a195` 完成源码迁移，目录调整为 `frontend + backend`，后端已从 Gradle 转换为 Java 21 Maven 聚合工程。用户体系、岗位匹配和微服务拆分仍在后续路线图中。
 
 ## 项目定位
 
@@ -24,16 +24,16 @@ flowchart LR
     H --> I
 ```
 
-## 核心能力
+## 当前基线能力
 
 - 简历上传、Tika 文本解析、内容去重和结构化 AI 诊断。
-- 岗位管理、JD 结构化解析、简历与岗位匹配分析。
-- 结合简历和岗位生成模拟面试题、智能追问及回答评分。
+- 文字/语音模拟面试、Skill 出题、智能追问、回答评分和报告导出。
 - 基于 PostgreSQL + pgvector 的个人知识库和 RAG 问答。
-- 基于 RabbitMQ 的简历分析异步任务、重试、死信、幂等和补偿。
-- 基于 Gateway + JWT 的统一认证和用户数据隔离。
-- 基于 Nacos 和 OpenFeign 的服务治理与内部调用。
+- 基于 Redis Stream 的简历分析、知识库向量化和面试评估异步任务。
+- Spring AI 多 Provider、结构化输出重试和 Prompt 模板。
 - 基于 SSE 的 AI 回答和任务进度流式返回。
+
+岗位管理与匹配、用户认证、RabbitMQ 可靠链路和 Spring Cloud Alibaba 微服务属于 CareerAI 后续改造目标，不是当前已完成功能。
 
 ## 与上游项目的差异
 
@@ -55,7 +55,7 @@ flowchart LR
 - Spring AI、Nacos、Spring Cloud Gateway、OpenFeign
 - RabbitMQ、Redis、MySQL、PostgreSQL + pgvector
 - Apache Tika、S3 兼容对象存储、SSE、WebSocket
-- Gradle、JUnit 5、Testcontainers
+- Maven、JUnit 5、Testcontainers
 
 ### 前端
 
@@ -64,7 +64,7 @@ flowchart LR
 
 ### 工程化
 
-- Docker Compose、GitHub Actions
+- 本地 Docker 中间件、GitHub Actions
 - OpenAPI、Micrometer、结构化日志与 Trace ID
 
 > 上述列表是目标技术栈，不代表当前仓库中的所有能力均已完成。只有通过实现、测试和演示验收的能力才会写入最终项目简历。
@@ -127,8 +127,10 @@ flowchart TB
 
 - [x] 盘点上游功能、依赖、测试和架构差距。
 - [x] 输出 CareerAI 目标业务闭环和改造工作清单。
-- [ ] 导入干净的上游代码并完成品牌、包名和配置改造。
-- [ ] 修复前端 TypeScript 构建，建立后端测试与 CI 基线。
+- [x] 导入干净的上游代码并调整为 `frontend + backend` 目录。
+- [x] 将后端从 Gradle 转换为 Java 21 Maven 聚合工程。
+- [x] 修复并验证前端构建、后端编译和测试基线。
+- [x] 将 Java 包名迁移为 `com.yzh666.careerai`。
 - [ ] 实现用户认证和全链路数据隔离。
 - [ ] 实现岗位中心、JD 解析和岗位匹配报告。
 - [ ] 将简历分析迁移为 RabbitMQ 可靠异步链路。
@@ -143,12 +145,62 @@ flowchart TB
 
 ```text
 CareerAI/
+├── frontend/                         # React + TypeScript + Vite
+├── backend/
+│   ├── pom.xml                       # Maven 父工程
+│   └── careerai-app/                 # 当前可运行单体
+│       ├── pom.xml
+│       └── src/
 ├── docs/
 │   └── CareerAI-改造工作清单.md
+├── .env.example
+├── .sdkmanrc
+├── AGENTS.md
+├── LICENSE
+├── NOTICE.md
 └── README.md
 ```
 
-业务代码正式导入后，本节将更新为实际模块结构和启动说明。
+业务闭环稳定后，再在 `backend/` 下增加 Gateway、用户、简历、岗位、面试、知识库和 AI 服务模块。
+
+## 本地开发
+
+项目不使用 Docker Compose，应用直接连接本机 Docker 中已经存在的中间件：
+
+| 能力 | 本地容器 | 端口 | 当前阶段 |
+| --- | --- | --- | --- |
+| PostgreSQL + pgvector | `v-postgres` | `5432` | 必需 |
+| Redis | `dev-redis7` | `6379` | 必需 |
+| RustFS / S3 | `v-rustfs` | `9000/9001` | 必需 |
+| MySQL | `mysql8` | `3306` | 用户/岗位服务拆分时接入 |
+| RabbitMQ | `rabbitmq` | `5672/15672` | 异步链路改造时接入 |
+| Nacos | `nacos` | `8848/9848/9849` | 微服务拆分时接入 |
+
+本地 PostgreSQL 容器中需要独立的 `careerai` 数据库和 `vector` 扩展。复制配置模板并填写本机已有容器的真实凭证：
+
+```bash
+cp .env.example .env
+sdk env
+```
+
+启动后端：
+
+```bash
+cd backend
+mvn clean test
+mvn -pl careerai-app spring-boot:run
+```
+
+启动前端：
+
+```bash
+cd frontend
+corepack enable
+pnpm install --frozen-lockfile
+pnpm dev
+```
+
+默认访问地址：前端 `http://localhost:5173`，后端 `http://localhost:8080`，Swagger UI `http://localhost:8080/swagger-ui.html`。
 
 ## 开发顺序建议
 
@@ -165,6 +217,6 @@ CareerAI/
 
 ## 上游与许可证
 
-本项目计划基于 [Snailclimb/interview-guide](https://github.com/Snailclimb/interview-guide) 修改。上游项目使用 AGPL-3.0 License；导入上游代码时将保留原许可证、版权声明和修改说明，并按许可证要求公开对应源码。
+本项目基于 [Snailclimb/interview-guide](https://github.com/Snailclimb/interview-guide) 修改。上游项目使用 AGPL-3.0 License；本仓库保留原许可证、上游来源和修改说明，并按许可证要求公开对应源码。导入版本和迁移说明见 [NOTICE.md](NOTICE.md)。
 
 项目完成前，请勿将尚未实现或未验证的目标能力作为已完成成果写入简历。
