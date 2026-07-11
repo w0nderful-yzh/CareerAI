@@ -27,6 +27,8 @@ public interface RagChatMessageRepository extends JpaRepository<RagChatMessageEn
      */
     Optional<RagChatMessageEntity> findTopBySessionIdOrderByMessageOrderDesc(Long sessionId);
 
+    Optional<RagChatMessageEntity> findByIdAndSession_UserId(Long id, Long userId);
+
     /**
      * 获取会话中最近 N 条已完成的消息（按 messageOrder 倒序取，结果需要反转为正序）
      */
@@ -51,4 +53,7 @@ public interface RagChatMessageRepository extends JpaRepository<RagChatMessageEn
      * 统计所有用户消息数（即总提问次数）
      */
     long countByType(MessageType type);
+
+    @Query("SELECT COUNT(m) FROM RagChatMessageEntity m WHERE m.type = :type AND m.session.userId = :userId")
+    long countByTypeAndUserId(@Param("type") MessageType type, @Param("userId") Long userId);
 }

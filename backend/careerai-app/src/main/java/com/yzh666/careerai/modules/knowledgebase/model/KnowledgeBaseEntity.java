@@ -9,8 +9,9 @@ import java.time.LocalDateTime;
  */
 @Entity
 @Table(name = "knowledge_bases", indexes = {
-    @Index(name = "idx_kb_hash", columnList = "fileHash", unique = true),
-    @Index(name = "idx_kb_category", columnList = "category")
+    @Index(name = "idx_kb_user_hash", columnList = "userId,fileHash"),
+    @Index(name = "idx_kb_user_category", columnList = "userId,category"),
+    @Index(name = "idx_kb_user_uploaded", columnList = "userId,uploadedAt")
 })
 public class KnowledgeBaseEntity {
 
@@ -18,8 +19,11 @@ public class KnowledgeBaseEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    // 所属用户ID
+    private Long userId;
+
     // 文件内容的SHA-256哈希值，用于去重
-    @Column(nullable = false, unique = true, length = 64)
+    @Column(nullable = false, length = 64)
     private String fileHash;
 
     // 知识库名称（用户自定义或从文件名提取）
@@ -87,6 +91,14 @@ public class KnowledgeBaseEntity {
     
     public void setId(Long id) {
         this.id = id;
+    }
+
+    public Long getUserId() {
+        return userId;
+    }
+
+    public void setUserId(Long userId) {
+        this.userId = userId;
     }
     
     public String getFileHash() {
@@ -219,4 +231,3 @@ public class KnowledgeBaseEntity {
         this.chunkCount = chunkCount;
     }
 }
-

@@ -9,6 +9,7 @@ import com.yzh666.careerai.modules.resume.model.ResumeAnalysisEntity;
 import com.yzh666.careerai.modules.resume.model.ResumeEntity;
 import com.yzh666.careerai.modules.resume.repository.ResumeAnalysisRepository;
 import com.yzh666.careerai.modules.resume.repository.ResumeRepository;
+import com.yzh666.careerai.modules.user.service.CurrentUserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -35,6 +36,7 @@ public class ResumePersistenceService {
     private final ObjectMapper objectMapper;
     private final ResumeMapper resumeMapper;
     private final FileHashService fileHashService;
+    private final CurrentUserService currentUserService;
     
     /**
      * 检查简历是否已存在（基于文件内容hash）
@@ -45,10 +47,11 @@ public class ResumePersistenceService {
     public Optional<ResumeEntity> findExistingResume(MultipartFile file) {
         try {
             String fileHash = fileHashService.calculateHash(file);
-            Optional<ResumeEntity> existing = resumeRepository.findByFileHash(fileHash);
+            Long userId = currentUserService.currentUserId();
+            Optional<ResumeEntity> existing = resumeRepository.findByUserIdAndFileHash(userId, fileHash);
             
             if (existing.isPresent()) {
-                log.info("检测到重复简历: hash={}", fileHash);
+                log.info("检测到重复简历: userId={}, hash={}", userId, fileHash);
                 ResumeEntity resume = existing.get();
                 resume.incrementAccessCount();
                 resumeRepository.save(resume);
@@ -69,8 +72,10 @@ public class ResumePersistenceService {
                                    String storageKey, String storageUrl) {
         try {
             String fileHash = fileHashService.calculateHash(file);
+            Long userId = currentUserService.currentUserId();
             
             ResumeEntity resume = new ResumeEntity();
+            resume.setUserId(userId);
             resume.setFileHash(fileHash);
             resume.setOriginalFilename(file.getOriginalFilename());
             resume.setFileSize(file.getSize());
@@ -80,7 +85,7 @@ public class ResumePersistenceService {
             resume.setResumeText(resumeText);
             
             ResumeEntity saved = resumeRepository.save(resume);
-            log.info("简历已保存: id={}, hash={}", saved.getId(), fileHash);
+            log.info("简历已保存: id={}, userId={}, hash={}", saved.getId(), userId, fileHash);
             
             return saved;
         } catch (Exception e) {
@@ -118,6 +123,7 @@ public class ResumePersistenceService {
      * 获取简历的最新评测结果
      */
     public Optional<ResumeAnalysisEntity> getLatestAnalysis(Long resumeId) {
+        findById(resumeId).orElseThrow(() -> new BusinessException(ErrorCode.RESUME_NOT_FOUND));
         return Optional.ofNullable(analysisRepository.findFirstByResumeIdOrderByAnalyzedAtDesc(resumeId));
     }
     
@@ -132,13 +138,14 @@ public class ResumePersistenceService {
      * 获取所有简历列表
      */
     public List<ResumeEntity> findAllResumes() {
-        return resumeRepository.findAll();
+        return resumeRepository.findByUserIdOrderByUploadedAtDesc(currentUserService.currentUserId());
     }
     
     /**
      * 获取简历的所有评测记录
      */
     public List<ResumeAnalysisEntity> findAnalysesByResumeId(Long resumeId) {
+        findById(resumeId).orElseThrow(() -> new BusinessException(ErrorCode.RESUME_NOT_FOUND));
         return analysisRepository.findByResumeIdOrderByAnalyzedAtDesc(resumeId);
     }
     
@@ -177,7 +184,7 @@ public class ResumePersistenceService {
      * 根据ID获取简历
      */
     public Optional<ResumeEntity> findById(Long id) {
-        return resumeRepository.findById(id);
+        return resumeRepository.findByIdAndUserId(id, currentUserService.currentUserId());
     }
     
     /**
@@ -186,7 +193,7 @@ public class ResumePersistenceService {
      */
     @Transactional(rollbackFor = Exception.class)
     public void deleteResume(Long id) {
-        Optional<ResumeEntity> resumeOpt = resumeRepository.findById(id);
+        Optional<ResumeEntity> resumeOpt = findById(id);
         if (resumeOpt.isEmpty()) {
             throw new BusinessException(ErrorCode.RESUME_NOT_FOUND);
         }

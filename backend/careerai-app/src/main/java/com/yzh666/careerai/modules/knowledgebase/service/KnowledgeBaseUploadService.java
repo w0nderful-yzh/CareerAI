@@ -9,6 +9,7 @@ import com.yzh666.careerai.modules.knowledgebase.listener.VectorizeStreamProduce
 import com.yzh666.careerai.modules.knowledgebase.model.KnowledgeBaseEntity;
 import com.yzh666.careerai.modules.knowledgebase.model.VectorStatus;
 import com.yzh666.careerai.modules.knowledgebase.repository.KnowledgeBaseRepository;
+import com.yzh666.careerai.modules.user.service.CurrentUserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -34,6 +35,7 @@ public class KnowledgeBaseUploadService {
     private final FileValidationService fileValidationService;
     private final FileHashService fileHashService;
     private final VectorizeStreamProducer vectorizeStreamProducer;
+    private final CurrentUserService currentUserService;
 
     private static final long MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
     
@@ -58,9 +60,10 @@ public class KnowledgeBaseUploadService {
 
         // 3. 检查知识库是否已存在（去重）
         String fileHash = fileHashService.calculateHash(file);
-        Optional<KnowledgeBaseEntity> existingKb = knowledgeBaseRepository.findByFileHash(fileHash);
+        Long userId = currentUserService.currentUserId();
+        Optional<KnowledgeBaseEntity> existingKb = knowledgeBaseRepository.findByUserIdAndFileHash(userId, fileHash);
         if (existingKb.isPresent()) {
-            log.info("检测到重复知识库: hash={}", fileHash);
+            log.info("检测到重复知识库: userId={}, hash={}", userId, fileHash);
             return persistenceService.handleDuplicateKnowledgeBase(existingKb.get(), fileHash);
         }
 
@@ -121,7 +124,7 @@ public class KnowledgeBaseUploadService {
      * @param kbId 知识库ID
      */
     public void revectorize(Long kbId) {
-        KnowledgeBaseEntity kb = knowledgeBaseRepository.findById(kbId)
+        KnowledgeBaseEntity kb = knowledgeBaseRepository.findByIdAndUserId(kbId, currentUserService.currentUserId())
             .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "知识库不存在"));
 
         log.info("开始重新向量化知识库: kbId={}, name={}", kbId, kb.getName());
@@ -141,4 +144,3 @@ public class KnowledgeBaseUploadService {
         log.info("重新向量化任务已发送: kbId={}", kbId);
     }
 }
-

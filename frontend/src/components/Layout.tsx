@@ -1,9 +1,10 @@
 import {Link, Outlet, useLocation, useNavigate} from 'react-router-dom';
 import {motion} from 'framer-motion';
-import {Calendar, ChevronRight, Database, FileStack, MessageSquare, Moon, Settings, Sparkles, Sun, Users,} from 'lucide-react';
+import {Calendar, ChevronRight, Database, FileStack, LogOut, MessageSquare, Moon, Settings, Sparkles, Sun, Users,} from 'lucide-react';
 import {useTheme} from '../hooks/useTheme';
 import {useState} from 'react';
 import UnifiedInterviewModal, {UnifiedInterviewConfig} from './UnifiedInterviewModal';
+import {useAuth} from '../context/AuthContext';
 
 interface NavItem {
   id: string;
@@ -23,6 +24,7 @@ export default function Layout() {
   const location = useLocation();
   const currentPath = location.pathname;
   const {theme, toggleTheme} = useTheme();
+  const {user, logout} = useAuth();
   const navigate = useNavigate();
   const [interviewModalPreset, setInterviewModalPreset] = useState<{
     defaultMode: 'text' | 'voice';
@@ -77,6 +79,11 @@ export default function Layout() {
         },
       },
     });
+  };
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login', { replace: true });
   };
 
   // 按业务模块组织的导航项
@@ -220,6 +227,23 @@ export default function Layout() {
 
         {/* 底部信息 */}
         <div className="p-4 border-t border-slate-100 dark:border-slate-700">
+          <div className="mb-3 flex items-center justify-between rounded-xl bg-slate-50 dark:bg-slate-800 px-3 py-2">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-slate-700 dark:text-slate-100">
+                {user?.displayName || user?.username || 'CareerAI 用户'}
+              </p>
+              <p className="truncate text-xs text-slate-400 dark:text-slate-500">
+                @{user?.username}
+              </p>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-red-500 dark:hover:bg-slate-700"
+              title="退出登录"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
+          </div>
           <div className="px-3 py-2 bg-gradient-to-r from-primary-50 to-indigo-50 dark:from-primary-900/30 dark:to-slate-800 rounded-xl">
             <p className="text-xs text-primary-600 dark:text-primary-400 font-medium">CareerAI v0.1</p>
             <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Powered by AI</p>

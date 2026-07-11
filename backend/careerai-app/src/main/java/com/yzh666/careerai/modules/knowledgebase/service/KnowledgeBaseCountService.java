@@ -4,6 +4,7 @@ import com.yzh666.careerai.common.exception.BusinessException;
 import com.yzh666.careerai.common.exception.ErrorCode;
 import com.yzh666.careerai.modules.knowledgebase.model.KnowledgeBaseEntity;
 import com.yzh666.careerai.modules.knowledgebase.repository.KnowledgeBaseRepository;
+import com.yzh666.careerai.modules.user.service.CurrentUserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -22,6 +23,7 @@ import java.util.Set;
 public class KnowledgeBaseCountService {
 
     private final KnowledgeBaseRepository knowledgeBaseRepository;
+    private final CurrentUserService currentUserService;
 
     /**
      * 批量更新知识库提问计数（使用单条 SQL 批量更新）
@@ -37,9 +39,10 @@ public class KnowledgeBaseCountService {
 
         // 去重
         List<Long> uniqueIds = knowledgeBaseIds.stream().distinct().toList();
+        Long userId = currentUserService.currentUserId();
 
         // 验证所有知识库是否存在
-        Set<Long> existingIds = new HashSet<>(knowledgeBaseRepository.findAllById(uniqueIds)
+        Set<Long> existingIds = new HashSet<>(knowledgeBaseRepository.findByIdInAndUserId(uniqueIds, userId)
                 .stream().map(KnowledgeBaseEntity::getId).toList());
 
         for (Long id : uniqueIds) {
@@ -49,7 +52,7 @@ public class KnowledgeBaseCountService {
         }
 
         // 批量更新（单条 SQL）
-        int updated = knowledgeBaseRepository.incrementQuestionCountBatch(uniqueIds);
+        int updated = knowledgeBaseRepository.incrementQuestionCountBatchForUser(userId, uniqueIds);
         log.debug("批量更新知识库提问计数: ids={}, updated={}", uniqueIds, updated);
     }
 }

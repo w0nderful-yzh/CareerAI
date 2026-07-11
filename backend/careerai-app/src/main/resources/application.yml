@@ -92,6 +92,13 @@ spring:
 
 # Application custom configuration
 app:
+  auth:
+    jwt-secret: ${APP_AUTH_JWT_SECRET:careerai-dev-jwt-secret-change-me-at-least-32}
+    access-token-ttl-minutes: ${APP_AUTH_ACCESS_TOKEN_TTL_MINUTES:120}
+    anonymous-user:
+      enabled: ${APP_AUTH_ANONYMOUS_USER_ENABLED:true}
+      username: ${APP_AUTH_ANONYMOUS_USERNAME:local-dev}
+
   ai:
     default-provider: dashscope
     default-embedding-provider: dashscope

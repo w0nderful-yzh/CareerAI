@@ -1,4 +1,5 @@
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
+import { clearAuthToken, getAuthToken } from '../utils/authStorage';
 
 declare module 'axios' {
   interface AxiosRequestConfig {
@@ -23,6 +24,14 @@ export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
 const instance: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
   timeout: 60000,
+});
+
+instance.interceptors.request.use((config) => {
+  const token = getAuthToken();
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
 });
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -124,6 +133,12 @@ instance.interceptors.response.use(
         // 成功：返回 data
         response.data = result.data;
         return response;
+      }
+      if (result.code === 401) {
+        clearAuthToken();
+        if (window.location.pathname !== '/login') {
+          window.location.href = '/login';
+        }
       }
       // 失败：直接抛出 message
       return Promise.reject(new Error(result.message || '请求失败'));
