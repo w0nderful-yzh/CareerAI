@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import {
   BriefcaseBusiness,
   Building2,
+  CheckCircle2,
   ExternalLink,
   FileText,
   Loader2,
@@ -11,10 +12,13 @@ import {
   Play,
   Plus,
   Sparkles,
+  Target,
   Trash2,
 } from 'lucide-react';
 import { getErrorMessage } from '../api/request';
+import { historyApi, type ResumeListItem } from '../api/history';
 import { jobApi, type JobItem, type JobStatus } from '../api/jobs';
+import { jobMatchApi, type JobMatchReport } from '../api/jobMatches';
 import type { CategoryDTO } from '../api/skill';
 import { CUSTOM_SKILL_ID } from '../hooks/useInterviewConfig';
 
@@ -39,9 +43,13 @@ const STATUS_STYLES: Record<JobStatus, string> = {
 export default function JobCenterPage() {
   const navigate = useNavigate();
   const [jobs, setJobs] = useState<JobItem[]>([]);
+  const [resumes, setResumes] = useState<ResumeListItem[]>([]);
+  const [reportsByJob, setReportsByJob] = useState<Record<number, JobMatchReport[]>>({});
+  const [selectedResumeIds, setSelectedResumeIds] = useState<Record<number, string>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [parsing, setParsing] = useState(false);
+  const [matchingJobId, setMatchingJobId] = useState<number | null>(null);
   const [error, setError] = useState('');
 
   const [title, setTitle] = useState('');
@@ -59,7 +67,14 @@ export default function JobCenterPage() {
   const loadJobs = async () => {
     setLoading(true);
     try {
-      setJobs(await jobApi.list());
+      const [jobList, resumeList, reportList] = await Promise.all([
+        jobApi.list(),
+        historyApi.getResumes(),
+        jobMatchApi.list(),
+      ]);
+      setJobs(jobList);
+      setResumes(resumeList);
+      setReportsByJob(groupReportsByJob(reportList));
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -138,8 +153,38 @@ export default function JobCenterPage() {
     try {
       await jobApi.delete(job.id);
       setJobs(prev => prev.filter(item => item.id !== job.id));
+      setReportsByJob(prev => {
+        const next = { ...prev };
+        delete next[job.id];
+        return next;
+      });
     } catch (err) {
       setError(getErrorMessage(err));
+    }
+  };
+
+  const createMatchReport = async (job: JobItem) => {
+    const selectedResumeId = selectedResumeIds[job.id] ?? resumes[0]?.id?.toString();
+    if (!selectedResumeId) {
+      setError('请先上传一份简历，再生成岗位匹配报告。');
+      return;
+    }
+
+    setMatchingJobId(job.id);
+    setError('');
+    try {
+      const report = await jobMatchApi.create({
+        jobId: job.id,
+        resumeId: Number(selectedResumeId),
+      });
+      setReportsByJob(prev => ({
+        ...prev,
+        [job.id]: [report, ...(prev[job.id] ?? []).filter(item => item.id !== report.id)],
+      }));
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setMatchingJobId(null);
     }
   };
 
@@ -176,7 +221,7 @@ export default function JobCenterPage() {
         <div className="grid grid-cols-3 gap-3 text-center">
           <Metric label="目标岗位" value={activeJobs.length} />
           <Metric label="已投递" value={jobs.filter(job => job.status === 'APPLIED').length} />
-          <Metric label="面试中" value={jobs.filter(job => job.status === 'INTERVIEW').length} />
+          <Metric label="匹配报告" value={Object.values(reportsByJob).reduce((sum, reports) => sum + reports.length, 0)} />
         </div>
       </div>
 
@@ -332,6 +377,48 @@ export default function JobCenterPage() {
                     ))}
                   </div>
 
+                  <div className="mt-4 rounded-2xl border border-primary-100 bg-primary-50/60 p-3 dark:border-primary-900/40 dark:bg-primary-900/10">
+                    <div className="mb-2 flex items-center gap-2 text-xs font-bold text-primary-700 dark:text-primary-300">
+                      <Target className="h-3.5 w-3.5" />
+                      简历-岗位匹配
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                      <select
+                        value={selectedResumeIds[job.id] ?? resumes[0]?.id?.toString() ?? ''}
+                        onChange={event => setSelectedResumeIds(prev => ({
+                          ...prev,
+                          [job.id]: event.target.value,
+                        }))}
+                        disabled={resumes.length === 0}
+                        className="min-w-0 rounded-xl border border-primary-100 bg-white px-3 py-2 text-xs font-medium text-slate-700 outline-none transition focus:border-primary-300 focus:ring-4 focus:ring-primary-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-primary-900/50 dark:bg-slate-900 dark:text-slate-200 dark:focus:ring-primary-900/30"
+                      >
+                        {resumes.length === 0 ? (
+                          <option value="">暂无简历</option>
+                        ) : resumes.map(resume => (
+                          <option key={resume.id} value={resume.id}>
+                            {resume.filename}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => createMatchReport(job)}
+                        disabled={matchingJobId === job.id || resumes.length === 0}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {matchingJobId === job.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                        生成报告
+                      </button>
+                    </div>
+                    {reportsByJob[job.id]?.[0] ? (
+                      <MatchReportCard report={reportsByJob[job.id][0]} />
+                    ) : (
+                      <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                        选择一份简历，生成它和当前 JD 的匹配度、短板和改进清单。
+                      </p>
+                    )}
+                  </div>
+
                   <div className="mt-4 flex gap-2">
                     <button
                       onClick={() => startInterview(job)}
@@ -353,6 +440,83 @@ export default function JobCenterPage() {
             </div>
           )}
         </section>
+      </div>
+    </div>
+  );
+}
+
+function groupReportsByJob(reports: JobMatchReport[]) {
+  return reports.reduce<Record<number, JobMatchReport[]>>((acc, report) => {
+    acc[report.jobId] = [...(acc[report.jobId] ?? []), report];
+    return acc;
+  }, {});
+}
+
+function MatchReportCard({ report }: { report: JobMatchReport }) {
+  return (
+    <div className="mt-3 rounded-2xl border border-white/70 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-900/70">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+            {report.resumeFilename}
+          </p>
+          <p className="mt-1 text-sm font-bold text-slate-900 dark:text-white">
+            匹配度 {report.overallScore} 分
+          </p>
+        </div>
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-primary-500 to-indigo-500 text-sm font-black text-white shadow-sm">
+          {report.overallScore}
+        </div>
+      </div>
+
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        <ScorePill label="技能" value={report.skillScore} />
+        <ScorePill label="项目" value={report.projectScore} />
+        <ScorePill label="关键词" value={report.keywordScore} />
+      </div>
+
+      <p className="mt-3 text-xs leading-5 text-slate-600 dark:text-slate-300">
+        {report.summary}
+      </p>
+
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <ReportList title="匹配亮点" items={report.matchedHighlights} tone="good" />
+        <ReportList title="优先补强" items={report.actionItems.length > 0 ? report.actionItems : report.gaps} tone="todo" />
+      </div>
+    </div>
+  );
+}
+
+function ScorePill({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-xl bg-slate-50 px-2.5 py-2 text-center dark:bg-slate-800">
+      <p className="text-sm font-black text-slate-900 dark:text-white">{value}</p>
+      <p className="text-[10px] font-semibold text-slate-400">{label}</p>
+    </div>
+  );
+}
+
+function ReportList({
+  title,
+  items,
+  tone,
+}: {
+  title: string;
+  items: string[];
+  tone: 'good' | 'todo';
+}) {
+  const iconClassName = tone === 'good' ? 'text-emerald-500' : 'text-primary-500';
+
+  return (
+    <div>
+      <p className="mb-1.5 text-[11px] font-bold text-slate-500 dark:text-slate-400">{title}</p>
+      <div className="space-y-1.5">
+        {(items.length > 0 ? items.slice(0, 3) : ['暂无详细条目，请重新生成报告。']).map(item => (
+          <div key={item} className="flex items-start gap-1.5 text-[11px] leading-4 text-slate-600 dark:text-slate-300">
+            <CheckCircle2 className={`mt-0.5 h-3 w-3 shrink-0 ${iconClassName}`} />
+            <span>{item}</span>
+          </div>
+        ))}
       </div>
     </div>
   );

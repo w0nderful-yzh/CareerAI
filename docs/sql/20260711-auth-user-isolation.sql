@@ -65,3 +65,24 @@ CREATE TABLE IF NOT EXISTS jobs (
 );
 CREATE INDEX IF NOT EXISTS idx_jobs_user_updated ON jobs (user_id, updated_at);
 CREATE INDEX IF NOT EXISTS idx_jobs_user_status ON jobs (user_id, status);
+
+CREATE TABLE IF NOT EXISTS job_match_reports (
+  id bigserial PRIMARY KEY,
+  user_id bigint NOT NULL,
+  resume_id bigint NOT NULL,
+  job_id bigint NOT NULL,
+  resume_filename varchar(255) NOT NULL,
+  job_title varchar(160) NOT NULL,
+  overall_score integer NOT NULL,
+  skill_score integer NOT NULL,
+  project_score integer NOT NULL,
+  keyword_score integer NOT NULL,
+  summary text NOT NULL,
+  matched_highlights_json text,
+  gaps_json text,
+  action_items_json text,
+  created_at timestamp NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_job_match_user_created ON job_match_reports (user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_job_match_user_job_created ON job_match_reports (user_id, job_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_job_match_user_resume_created ON job_match_reports (user_id, resume_id, created_at);

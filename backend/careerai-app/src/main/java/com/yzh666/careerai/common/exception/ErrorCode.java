@@ -68,6 +68,8 @@ public enum ErrorCode {
     // ========== 岗位模块错误 95xx ==========
     JOB_NOT_FOUND(9501, "岗位不存在"),
     JOB_PARSE_FAILED(9502, "岗位 JD 解析失败"),
+    JOB_MATCH_NOT_FOUND(9601, "匹配报告不存在"),
+    JOB_MATCH_FAILED(9602, "简历岗位匹配失败"),
 
     // ========== 语音面试模块错误 10xxx ==========
     VOICE_SESSION_NOT_FOUND(10001, "语音面试会话不存在"),
