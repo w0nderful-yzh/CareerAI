@@ -19,6 +19,7 @@ ALTER TABLE resumes ADD COLUMN IF NOT EXISTS user_id bigint;
 UPDATE resumes
 SET user_id = (SELECT id FROM users WHERE username = 'local-dev')
 WHERE user_id IS NULL;
+ALTER TABLE resumes DROP CONSTRAINT IF EXISTS idx_resume_hash;
 DROP INDEX IF EXISTS idx_resume_hash;
 CREATE INDEX IF NOT EXISTS idx_resume_user_hash ON resumes (user_id, file_hash);
 CREATE INDEX IF NOT EXISTS idx_resume_user_uploaded ON resumes (user_id, uploaded_at);
@@ -37,6 +38,7 @@ ALTER TABLE knowledge_bases ADD COLUMN IF NOT EXISTS user_id bigint;
 UPDATE knowledge_bases
 SET user_id = (SELECT id FROM users WHERE username = 'local-dev')
 WHERE user_id IS NULL;
+ALTER TABLE knowledge_bases DROP CONSTRAINT IF EXISTS idx_kb_hash;
 DROP INDEX IF EXISTS idx_kb_hash;
 CREATE INDEX IF NOT EXISTS idx_kb_user_hash ON knowledge_bases (user_id, file_hash);
 CREATE INDEX IF NOT EXISTS idx_kb_user_category ON knowledge_bases (user_id, category);
@@ -47,3 +49,19 @@ UPDATE rag_chat_sessions
 SET user_id = (SELECT id FROM users WHERE username = 'local-dev')
 WHERE user_id IS NULL;
 CREATE INDEX IF NOT EXISTS idx_rag_session_user_updated ON rag_chat_sessions (user_id, updated_at);
+
+CREATE TABLE IF NOT EXISTS jobs (
+  id bigserial PRIMARY KEY,
+  user_id bigint,
+  title varchar(160) NOT NULL,
+  company varchar(160),
+  location varchar(120),
+  source_url varchar(500),
+  status varchar(20) NOT NULL DEFAULT 'TRACKING',
+  jd_text text NOT NULL,
+  parsed_categories_json text,
+  created_at timestamp NOT NULL DEFAULT now(),
+  updated_at timestamp NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_jobs_user_updated ON jobs (user_id, updated_at);
+CREATE INDEX IF NOT EXISTS idx_jobs_user_status ON jobs (user_id, status);

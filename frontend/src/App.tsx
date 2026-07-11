@@ -22,6 +22,7 @@ const VoiceInterviewPage = lazy(() => import('./pages/VoiceInterviewPage'));
 const VoiceInterviewEvaluationPage = lazy(() => import('./pages/VoiceInterviewEvaluationPage'));
 const InterviewSchedulePage = lazy(() => import('./pages/InterviewSchedulePage'));
 const InterviewHubPage = lazy(() => import('./pages/InterviewHubPage'));
+const JobCenterPage = lazy(() => import('./pages/JobCenterPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const InterviewDetailPanel = lazy(() => import('./components/InterviewDetailPanel'));
 const AuthPage = lazy(() => import('./pages/AuthPage'));
@@ -202,6 +203,9 @@ function App() {
 
             {/* 面试中心 */}
             <Route path="interview-hub" element={<InterviewHubPage />} />
+
+            {/* 岗位中心 */}
+            <Route path="jobs" element={<JobCenterPage />} />
 
             {/* 面试记录列表 */}
             <Route path="interviews" element={<InterviewHistoryWrapper />} />
