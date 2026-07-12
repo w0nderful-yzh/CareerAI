@@ -201,10 +201,11 @@ export default function JobCenterPage() {
     setMatchingJobId(job.id);
     setError('');
     try {
-      const report = await jobMatchApi.create({
+      const task = await jobMatchApi.createTask({
         jobId: job.id,
         resumeId: Number(selectedResumeId),
       });
+      const report = task.report ?? await waitForMatchReport(task.id);
       setReportsByJob(prev => ({
         ...prev,
         [job.id]: [report, ...(prev[job.id] ?? []).filter(item => item.id !== report.id)],
@@ -214,6 +215,20 @@ export default function JobCenterPage() {
     } finally {
       setMatchingJobId(null);
     }
+  };
+
+  const waitForMatchReport = async (taskId: number) => {
+    for (let i = 0; i < 90; i += 1) {
+      await sleep(2000);
+      const task = await jobMatchApi.getTask(taskId);
+      if (task.status === 'COMPLETED' && task.report) {
+        return task.report;
+      }
+      if (task.status === 'FAILED') {
+        throw new Error(task.errorMessage || '岗位匹配报告生成失败，请稍后重试。');
+      }
+    }
+    throw new Error('岗位匹配报告生成超时，请稍后在岗位中心刷新查看。');
   };
 
   const createImprovementPlan = async (report: JobMatchReport) => {
@@ -793,6 +808,10 @@ function Metric({ label, value }: { label: string; value: number }) {
       <p className="text-xs text-slate-400">{label}</p>
     </div>
   );
+}
+
+function sleep(ms: number) {
+  return new Promise(resolve => window.setTimeout(resolve, ms));
 }
 
 function Input({

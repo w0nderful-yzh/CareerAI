@@ -88,9 +88,13 @@ public class JobMatchService {
 
     public JobMatchReportDTO createReport(CreateJobMatchRequest request) {
         Long userId = currentUserService.currentUserId();
-        ResumeEntity resume = resumePersistenceService.findById(request.resumeId())
+        return createReportForUser(userId, request.resumeId(), request.jobId());
+    }
+
+    public JobMatchReportDTO createReportForUser(Long userId, Long resumeId, Long jobId) {
+        ResumeEntity resume = resumePersistenceService.findByIdAndUserId(resumeId, userId)
             .orElseThrow(() -> new BusinessException(ErrorCode.RESUME_NOT_FOUND));
-        JobEntity job = jobRepository.findByIdAndUserId(request.jobId(), userId)
+        JobEntity job = jobRepository.findByIdAndUserId(jobId, userId)
             .orElseThrow(() -> new BusinessException(ErrorCode.JOB_NOT_FOUND));
 
         if (resume.getResumeText() == null || resume.getResumeText().isBlank()) {
@@ -209,7 +213,7 @@ public class JobMatchService {
         return null;
     }
 
-    private JobMatchReportDTO toDTO(JobMatchReportEntity entity) {
+    JobMatchReportDTO toDTO(JobMatchReportEntity entity) {
         return new JobMatchReportDTO(
             entity.getId(),
             entity.getResumeId(),

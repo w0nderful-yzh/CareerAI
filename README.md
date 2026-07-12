@@ -27,13 +27,15 @@ flowchart LR
 ## 当前基线能力
 
 - 简历上传、Tika 文本解析、内容去重和结构化 AI 诊断。
+- 用户认证、岗位中心、JD 解析、简历-岗位匹配报告、简历改进计划和综合求职报告。
 - 文字/语音模拟面试、Skill 出题、智能追问、回答评分和报告导出。
 - 基于 PostgreSQL + pgvector 的个人知识库和 RAG 问答。
 - 基于 Redis Stream 的简历分析、知识库向量化和面试评估异步任务。
+- 基于 RabbitMQ 的简历-岗位匹配异步任务链路，支持任务状态追踪、手动 ACK、失败重试和死信队列。
 - Spring AI 多 Provider、结构化输出重试和 Prompt 模板。
 - 基于 SSE 的 AI 回答和任务进度流式返回。
 
-岗位管理与匹配、用户认证、RabbitMQ 可靠链路和 Spring Cloud Alibaba 微服务属于 CareerAI 后续改造目标，不是当前已完成功能。
+Spring Cloud Alibaba 微服务拆分仍属于 CareerAI 后续改造目标，不是当前已完成功能。
 
 ## 与上游项目的差异
 
@@ -131,10 +133,10 @@ flowchart TB
 - [x] 将后端从 Gradle 转换为 Java 21 Maven 聚合工程。
 - [x] 修复并验证前端构建、后端编译和测试基线。
 - [x] 将 Java 包名迁移为 `com.yzh666.careerai`。
-- [ ] 实现用户认证和全链路数据隔离。
-- [ ] 实现岗位中心、JD 解析和岗位匹配报告。
-- [ ] 将简历分析迁移为 RabbitMQ 可靠异步链路。
-- [ ] 完成面向目标岗位的文字模拟面试。
+- [x] 实现用户认证和全链路数据隔离。
+- [x] 实现岗位中心、JD 解析和岗位匹配报告。
+- [x] 将简历-岗位匹配迁移为 RabbitMQ 可靠异步链路。
+- [x] 完成面向目标岗位的文字模拟面试。
 - [ ] 将 RAG 与简历、岗位和面试薄弱点融合。
 - [ ] 接入 Gateway、Nacos、OpenFeign 并按边界拆分微服务。
 - [ ] 完成端到端测试、可观测性、部署和项目演示材料。
@@ -173,7 +175,7 @@ CareerAI/
 | Redis | `dev-redis7` | `6379` | 必需 |
 | RustFS / S3 | `v-rustfs` | `9000/9001` | 必需 |
 | MySQL | `mysql8` | `3306` | 用户/岗位服务拆分时接入 |
-| RabbitMQ | `rabbitmq` | `5672/15672` | 异步链路改造时接入 |
+| RabbitMQ | `rabbitmq` | `5672/15672` | 开启 `APP_RABBITMQ_ENABLED=true` 后用于岗位匹配异步链路 |
 | Nacos | `nacos` | `8848/9848/9849` | 微服务拆分时接入 |
 
 本地 PostgreSQL 容器中需要独立的 `careerai` 数据库和 `vector` 扩展。复制配置模板并填写本机已有容器的真实凭证：

@@ -186,6 +186,10 @@ public class ResumePersistenceService {
     public Optional<ResumeEntity> findById(Long id) {
         return resumeRepository.findByIdAndUserId(id, currentUserService.currentUserId());
     }
+
+    public Optional<ResumeEntity> findByIdAndUserId(Long id, Long userId) {
+        return resumeRepository.findByIdAndUserId(id, userId);
+    }
     
     /**
      * 删除简历及其所有关联数据

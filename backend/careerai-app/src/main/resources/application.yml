@@ -74,6 +74,18 @@ spring:
           connectionPoolSize: 64
           subscriptionConnectionMinimumIdleSize: 1
           subscriptionConnectionPoolSize: 50
+
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+    virtual-host: ${RABBITMQ_VHOST:/}
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    listener:
+      simple:
+        acknowledge-mode: manual
   
   # Spring AI 配置（chat + embedding 统一由 app.ai.providers 驱动，不使用自动配置）
   ai:
@@ -206,6 +218,21 @@ app:
   # CORS配置 - React前端
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:5174,http://localhost:80,http://127.0.0.1:5173,http://127.0.0.1:5174,http://127.0.0.1:80}
+
+  rabbitmq:
+    enabled: ${APP_RABBITMQ_ENABLED:false}
+    job-match:
+      exchange: ${APP_RABBITMQ_JOB_MATCH_EXCHANGE:careerai.ai}
+      retry-exchange: ${APP_RABBITMQ_JOB_MATCH_RETRY_EXCHANGE:careerai.ai.retry}
+      dead-letter-exchange: ${APP_RABBITMQ_JOB_MATCH_DLX:careerai.ai.dlx}
+      queue: ${APP_RABBITMQ_JOB_MATCH_QUEUE:careerai.ai.job-match}
+      retry-queue: ${APP_RABBITMQ_JOB_MATCH_RETRY_QUEUE:careerai.ai.job-match.retry}
+      dead-letter-queue: ${APP_RABBITMQ_JOB_MATCH_DLQ:careerai.ai.job-match.dlq}
+      routing-key: ${APP_RABBITMQ_JOB_MATCH_ROUTING_KEY:job-match}
+      retry-routing-key: ${APP_RABBITMQ_JOB_MATCH_RETRY_ROUTING_KEY:job-match.retry}
+      dead-letter-routing-key: ${APP_RABBITMQ_JOB_MATCH_DEAD_ROUTING_KEY:job-match.dead}
+      retry-delay-ms: ${APP_RABBITMQ_JOB_MATCH_RETRY_DELAY_MS:10000}
+      max-retries: ${APP_RABBITMQ_JOB_MATCH_MAX_RETRIES:3}
 
   # Voice interview configuration
   voice-interview:
