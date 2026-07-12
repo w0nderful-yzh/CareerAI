@@ -27,16 +27,17 @@ spring:
         username: ${NACOS_USERNAME:}
         password: ${NACOS_PASSWORD:}
     gateway:
-      mvc:
-        routes:
-          - id: knowledge-service
-            uri: lb://knowledge-service
-            predicates:
-              - Path=/api/knowledgebase/**,/api/rag-chat/**
-          - id: careerai-app
-            uri: lb://careerai-app
-            predicates:
-              - Path=/api/**,/actuator/**,/swagger-ui/**,/v3/api-docs/**
+      server:
+        webmvc:
+          routes:
+            - id: knowledge-service
+              uri: lb://knowledge-service
+              predicates:
+                - Path=/api/knowledgebase/**,/api/rag-chat/**
+            - id: careerai-app
+              uri: lb://careerai-app
+              predicates:
+                - Path=/api/**,/actuator/**,/swagger-ui/**,/v3/api-docs/**
 
 management:
   endpoints:
