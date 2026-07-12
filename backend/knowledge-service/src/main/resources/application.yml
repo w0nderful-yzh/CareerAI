@@ -18,7 +18,7 @@ springdoc:
     operations-sorter: alpha
   api-docs:
     path: /v3/api-docs
-  packages-to-scan: com.yzh666.careerai.modules.knowledgebase,com.yzh666.careerai.modules.user
+  packages-to-scan: com.yzh666.careerai.modules.knowledgebase
 
 spring:
   config:
@@ -46,14 +46,14 @@ spring:
       enabled: true
 
   datasource:
-    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:careerai}
-    username: ${POSTGRES_USER:postgres}
-    password: ${POSTGRES_PASSWORD:}
+    url: jdbc:postgresql://${KNOWLEDGE_POSTGRES_HOST:${POSTGRES_HOST:localhost}}:${KNOWLEDGE_POSTGRES_PORT:${POSTGRES_PORT:5432}}/${KNOWLEDGE_POSTGRES_DB:${POSTGRES_DB:careerai}}
+    username: ${KNOWLEDGE_POSTGRES_USER:${POSTGRES_USER:postgres}}
+    password: ${KNOWLEDGE_POSTGRES_PASSWORD:${POSTGRES_PASSWORD:}}
     driver-class-name: org.postgresql.Driver
 
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: ${KNOWLEDGE_JPA_DDL_AUTO:update}
     show-sql: false
     properties:
       hibernate:
@@ -91,10 +91,9 @@ spring:
 app:
   auth:
     jwt-secret: ${APP_AUTH_JWT_SECRET:careerai-dev-jwt-secret-change-me-at-least-32}
-    access-token-ttl-minutes: ${APP_AUTH_ACCESS_TOKEN_TTL_MINUTES:120}
     anonymous-user:
       enabled: ${APP_AUTH_ANONYMOUS_USER_ENABLED:true}
-      username: ${APP_AUTH_ANONYMOUS_USERNAME:local-dev}
+      id: ${APP_AUTH_ANONYMOUS_USER_ID:1}
 
   ai:
     default-provider: ${APP_AI_DEFAULT_PROVIDER:dashscope}

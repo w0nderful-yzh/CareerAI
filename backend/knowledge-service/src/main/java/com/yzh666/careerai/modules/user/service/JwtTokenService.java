@@ -2,7 +2,6 @@ package com.yzh666.careerai.modules.user.service;
 
 import com.yzh666.careerai.modules.user.config.AuthProperties;
 import com.yzh666.careerai.modules.user.model.AuthenticatedUser;
-import com.yzh666.careerai.modules.user.model.UserEntity;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Base64;
@@ -17,37 +16,14 @@ import tools.jackson.databind.ObjectMapper;
 
 @Service
 @RequiredArgsConstructor
-public class JwtTokenService {
+public class JwtTokenService implements AccessTokenParser {
 
     private static final String HMAC_SHA256 = "HmacSHA256";
 
     private final AuthProperties authProperties;
     private final ObjectMapper objectMapper;
 
-    public String createAccessToken(UserEntity user) {
-        long issuedAt = Instant.now().getEpochSecond();
-        long expiresAt = issuedAt + getExpiresInSeconds();
-
-        try {
-            String header = objectMapper.writeValueAsString(Map.of(
-                "alg", "HS256",
-                "typ", "JWT"
-            ));
-            String payload = objectMapper.writeValueAsString(Map.of(
-                "sub", user.getId(),
-                "username", user.getUsername(),
-                "iat", issuedAt,
-                "exp", expiresAt
-            ));
-            String signingInput = base64Url(header.getBytes(StandardCharsets.UTF_8))
-                + "."
-                + base64Url(payload.getBytes(StandardCharsets.UTF_8));
-            return signingInput + "." + sign(signingInput);
-        } catch (Exception e) {
-            throw new IllegalStateException("创建访问令牌失败", e);
-        }
-    }
-
+    @Override
     public Optional<AuthenticatedUser> parseAccessToken(String token) {
         try {
             String[] parts = token.split("\\.");
@@ -78,10 +54,6 @@ public class JwtTokenService {
         } catch (Exception e) {
             return Optional.empty();
         }
-    }
-
-    public long getExpiresInSeconds() {
-        return authProperties.getAccessTokenTtlMinutes() * 60;
     }
 
     private String sign(String signingInput) throws Exception {

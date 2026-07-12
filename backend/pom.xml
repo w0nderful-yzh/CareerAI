@@ -19,11 +19,8 @@
   <description>CareerAI Maven backend parent</description>
 
   <modules>
+    <module>careerai-shared</module>
     <module>careerai-app</module>
-    <module>user-service</module>
-    <module>resume-service</module>
-    <module>job-service</module>
-    <module>interview-service</module>
     <module>knowledge-service</module>
     <module>gateway-service</module>
   </modules>

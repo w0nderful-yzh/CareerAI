@@ -46,14 +46,6 @@ spring:
     retry:
       max-attempts: 1
       on-client-errors: false
-    vectorstore:
-      pgvector:
-        index-type: HNSW
-        distance-type: COSINE_DISTANCE
-        dimensions: 1024
-        initialize-schema: false
-        remove-existing-vector-store-table: false
-
 app:
   ai:
     default-provider: dashscope

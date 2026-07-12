@@ -104,15 +104,6 @@ spring:
     retry:
       max-attempts: 1  # 不重试，失败立即返回
       on-client-errors: false
-    # PostgreSQL Vector Store配置
-    vectorstore:
-      pgvector:
-        index-type: HNSW
-        distance-type: COSINE_DISTANCE
-        dimensions: 1024  # text-embedding-v3实际生成的向量维度
-        initialize-schema: true # 开发环境设置为 true，方便快速启动。生产环境设置为 false，手动管理数据库 schema，避免意外变更。
-        remove-existing-vector-store-table: false  # 保留现有表和数据
-
 # Application custom configuration
 app:
   auth:

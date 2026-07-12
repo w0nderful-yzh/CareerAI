@@ -17,7 +17,7 @@ import tools.jackson.databind.ObjectMapper;
 
 @Service
 @RequiredArgsConstructor
-public class JwtTokenService {
+public class JwtTokenService implements AccessTokenParser {
 
     private static final String HMAC_SHA256 = "HmacSHA256";
 
@@ -48,6 +48,7 @@ public class JwtTokenService {
         }
     }
 
+    @Override
     public Optional<AuthenticatedUser> parseAccessToken(String token) {
         try {
             String[] parts = token.split("\\.");

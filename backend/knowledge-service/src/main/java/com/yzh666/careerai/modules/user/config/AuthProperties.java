@@ -10,12 +10,11 @@ import org.springframework.stereotype.Component;
 public class AuthProperties {
 
     private String jwtSecret = "careerai-dev-jwt-secret-change-me-at-least-32";
-    private long accessTokenTtlMinutes = 120;
     private AnonymousUser anonymousUser = new AnonymousUser();
 
     @Data
     public static class AnonymousUser {
         private boolean enabled = true;
-        private String username = "local-dev";
+        private long id = 1L;
     }
 }
