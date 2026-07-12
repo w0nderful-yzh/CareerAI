@@ -2,14 +2,10 @@ package com.yzh666.careerai.modules.llmprovider.controller;
 
 import com.yzh666.careerai.common.annotation.RateLimit;
 import com.yzh666.careerai.common.result.Result;
-import com.yzh666.careerai.modules.llmprovider.dto.AsrConfigDTO;
-import com.yzh666.careerai.modules.llmprovider.dto.AsrConfigRequest;
 import com.yzh666.careerai.modules.llmprovider.dto.CreateProviderRequest;
 import com.yzh666.careerai.modules.llmprovider.dto.DefaultProviderDTO;
 import com.yzh666.careerai.modules.llmprovider.dto.ProviderDTO;
 import com.yzh666.careerai.modules.llmprovider.dto.ProviderTestResult;
-import com.yzh666.careerai.modules.llmprovider.dto.TtsConfigDTO;
-import com.yzh666.careerai.modules.llmprovider.dto.TtsConfigRequest;
 import com.yzh666.careerai.modules.llmprovider.dto.UpdateProviderRequest;
 import com.yzh666.careerai.modules.llmprovider.service.LlmProviderConfigService;
 import jakarta.validation.Valid;
@@ -99,39 +95,5 @@ public class LlmProviderController {
   public Result<Void> updateDefaultEmbeddingProvider(@RequestBody DefaultProviderDTO request) {
     configService.updateDefaultEmbeddingProvider(request);
     return Result.success();
-  }
-
-  // ===== Voice ASR/TTS Config =====
-
-  @GetMapping("/voice/asr")
-  @RateLimit(dimension = RateLimit.Dimension.GLOBAL, count = 30)
-  public Result<AsrConfigDTO> getAsrConfig() {
-    return Result.success(configService.getAsrConfig());
-  }
-
-  @PutMapping("/voice/asr")
-  @RateLimit(dimension = RateLimit.Dimension.GLOBAL, count = 5)
-  public Result<Void> updateAsrConfig(@RequestBody AsrConfigRequest request) {
-    configService.updateAsrConfig(request);
-    return Result.success();
-  }
-
-  @GetMapping("/voice/tts")
-  @RateLimit(dimension = RateLimit.Dimension.GLOBAL, count = 30)
-  public Result<TtsConfigDTO> getTtsConfig() {
-    return Result.success(configService.getTtsConfig());
-  }
-
-  @PutMapping("/voice/tts")
-  @RateLimit(dimension = RateLimit.Dimension.GLOBAL, count = 5)
-  public Result<Void> updateTtsConfig(@RequestBody TtsConfigRequest request) {
-    configService.updateTtsConfig(request);
-    return Result.success();
-  }
-
-  @PostMapping("/voice/asr/test")
-  @RateLimit(dimension = RateLimit.Dimension.GLOBAL, count = 10)
-  public Result<ProviderTestResult> testAsrConfig() {
-    return Result.success(configService.testAsrConfig());
   }
 }

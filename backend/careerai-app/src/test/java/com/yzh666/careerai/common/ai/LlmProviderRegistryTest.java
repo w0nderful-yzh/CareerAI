@@ -3,7 +3,6 @@ package com.yzh666.careerai.common.ai;
 import com.yzh666.careerai.common.config.LlmProviderProperties;
 import com.yzh666.careerai.common.config.LlmProviderProperties.ProviderConfig;
 import com.yzh666.careerai.common.exception.BusinessException;
-import io.micrometer.observation.ObservationRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -13,7 +12,6 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.model.tool.ToolCallingManager;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -89,7 +87,7 @@ class LlmProviderRegistryTest {
     }
 
     @Test
-    @DisplayName("不同 ChatClient 配方共享同一个 provider 级 ChatModel")
+    @DisplayName("不同文字 ChatClient 配方共享同一个 provider 级 ChatModel")
     void chatClientVariantsShareProviderChatModel() {
         String providerId = "test-provider";
         ProviderConfig config = new ProviderConfig();
@@ -104,13 +102,10 @@ class LlmProviderRegistryTest {
 
         ChatClient defaultClient = registry.getChatClient(providerId);
         ChatClient plainClient = registry.getPlainChatClient(providerId);
-        ChatClient voiceClient = registry.getVoiceChatClient(providerId);
 
         assertNotNull(defaultClient);
         assertNotNull(plainClient);
-        assertNotNull(voiceClient);
         assertNotSame(defaultClient, plainClient, "Default and plain clients should keep advisor recipes isolated");
-        assertNotSame(defaultClient, voiceClient, "Default and voice clients should keep advisor recipes isolated");
         verify(properties, times(1)).getProviders();
     }
 

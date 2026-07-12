@@ -6,7 +6,7 @@ import AnalysisPanel from '../components/AnalysisPanel';
 import InterviewPanel from '../components/InterviewPanel';
 import InterviewDetailPanel from '../components/InterviewDetailPanel';
 import {formatDateOnly} from '../utils/date';
-import {CheckSquare, ChevronLeft, Clock, Download, MessageSquare, Mic} from 'lucide-react';
+import {CheckSquare, ChevronLeft, Clock, Download, MessageSquare} from 'lucide-react';
 
 interface ResumeDetailPageProps {
   resumeId: number;
@@ -276,7 +276,7 @@ export default function ResumeDetailPage({ resumeId, onBack, onStartInterview }:
               whileHover={{ scale: 1.02, y: -1 }}
               whileTap={{ scale: 0.98 }}
             >
-              <Mic className="w-4 h-4" />
+              <MessageSquare className="w-4 h-4" />
               开始模拟面试
             </motion.button>
           )}

@@ -3,7 +3,7 @@ import { skillApi, type SkillDTO, type CategoryDTO } from '../api/skill';
 import { historyApi, type ResumeListItem } from '../api/history';
 import { getSkillIcon } from '../utils/skillIcons';
 
-export type InterviewMode = 'text' | 'voice';
+export type InterviewMode = 'text';
 export type Difficulty = 'junior' | 'mid' | 'senior';
 
 export const DIFFICULTY_OPTIONS: { value: Difficulty; label: string; desc: string }[] = [
@@ -28,7 +28,6 @@ export interface InterviewConfigState {
   resumes: ResumeListItem[];
   llmProvider: string;
   questionCount: number;
-  plannedDuration: number;
   customJdText: string;
   parsedCustomJdText: string;
   customCategories: CategoryDTO[];
@@ -53,7 +52,6 @@ export function useInterviewConfig(options?: {
   const [resumeId, setResumeId] = useState<number | undefined>(undefined);
   const [resumes, setResumes] = useState<ResumeListItem[]>([]);
   const [questionCount, setQuestionCount] = useState<number>(6);
-  const [plannedDuration, setPlannedDuration] = useState(30);
   const [llmProvider, setLlmProvider] = useState(DEFAULT_LLM_PROVIDER);
   const [customJdText, setCustomJdText] = useState('');
   const [parsedCustomJdText, setParsedCustomJdText] = useState('');
@@ -129,7 +127,6 @@ export function useInterviewConfig(options?: {
     resumeId, setResumeId,
     resumes,
     questionCount, setQuestionCount,
-    plannedDuration, setPlannedDuration,
     llmProvider, setLlmProvider,
     customJdText, setCustomJdText,
     parsedCustomJdText,

@@ -1,7 +1,7 @@
 package com.yzh666.careerai.common.evaluation;
 
 /**
- * 通用面试问答记录（文字面试和语音面试共用）
+ * 文字面试问答记录
  */
 public record QaRecord(
     int questionIndex,

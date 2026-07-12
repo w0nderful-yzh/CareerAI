@@ -26,7 +26,7 @@ import java.util.stream.Collectors;
 
 /**
  * 统一面试评估服务
- * 文字面试和语音面试共用的评估逻辑：分批评估 + 结构化输出 + 二次汇总 + 降级兜底
+ * 文字面试评估逻辑：分批评估 + 结构化输出 + 二次汇总 + 降级兜底
  */
 @Service
 public class UnifiedEvaluationService {
@@ -89,7 +89,7 @@ public class UnifiedEvaluationService {
     }
 
     /**
-     * 评估面试问答（文字和语音通用）
+     * 评估文字面试问答
      *
      * @param chatClient  LLM 客户端
      * @param sessionId   会话ID（用于日志）

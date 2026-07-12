@@ -27,7 +27,7 @@ export default function Layout() {
   const {user, logout} = useAuth();
   const navigate = useNavigate();
   const [interviewModalPreset, setInterviewModalPreset] = useState<{
-    defaultMode: 'text' | 'voice';
+    defaultMode: 'text';
     defaultResumeId?: number;
     title: string;
     subtitle: string;
@@ -46,35 +46,13 @@ export default function Layout() {
 
   const handleInterviewStart = (config: UnifiedInterviewConfig) => {
     setInterviewModalPreset(null);
-    if (config.mode === 'text') {
-      navigate('/interview', {
-        state: {
-          resumeId: config.resumeId,
-          interviewConfig: {
-            skillId: config.skillId,
-            difficulty: config.difficulty,
-            questionCount: config.questionCount,
-            llmProvider: config.llmProvider,
-          },
-        },
-      });
-      return;
-    }
-
-    const params = new URLSearchParams({
-      skillId: config.skillId,
-      difficulty: config.difficulty,
-    });
-    navigate(`/voice-interview?${params.toString()}`, {
+    navigate('/interview', {
       state: {
-        voiceConfig: {
+        resumeId: config.resumeId,
+        interviewConfig: {
           skillId: config.skillId,
           difficulty: config.difficulty,
-          techEnabled: true,
-          projectEnabled: true,
-          hrEnabled: true,
-          plannedDuration: config.plannedDuration,
-          resumeId: config.resumeId,
+          questionCount: config.questionCount,
           llmProvider: config.llmProvider,
         },
       },
@@ -94,7 +72,7 @@ export default function Layout() {
       items: [
         { id: 'resumes', path: '/history', label: '简历管理', icon: FileStack, description: '管理简历，AI 分析' },
         { id: 'jobs', path: '/jobs', label: '岗位中心', icon: BriefcaseBusiness, description: 'JD 解析，目标岗位' },
-        { id: 'interview-hub', path: '/interview-hub', label: '模拟面试', icon: Sparkles, description: '文字/语音面试练习' },
+        { id: 'interview-hub', path: '/interview-hub', label: '模拟面试', icon: Sparkles, description: '文字面试练习' },
         { id: 'interviews', path: '/interviews', label: '面试记录', icon: Users, description: '查看面试历史' },
         { id: 'interview-schedule', path: '/interview-schedule', label: '面试日程', icon: Calendar, description: '管理面试安排' },
       ],
@@ -111,7 +89,7 @@ export default function Layout() {
       id: 'system',
       title: '系统',
       items: [
-        { id: 'settings', path: '/settings', label: '设置', icon: Settings, description: '管理模型和语音服务' },
+        { id: 'settings', path: '/settings', label: '设置', icon: Settings, description: '管理模型服务' },
       ],
     },
   ];
@@ -128,8 +106,7 @@ export default function Layout() {
     if (path === '/interview-hub') {
       return currentPath === '/interview-hub'
         || currentPath === '/interview'
-        || currentPath.startsWith('/interview/')
-        || currentPath.startsWith('/voice-interview');
+        || currentPath.startsWith('/interview/');
     }
     if (path === '/knowledgebase') {
       return currentPath === '/knowledgebase' || currentPath === '/knowledgebase/upload';

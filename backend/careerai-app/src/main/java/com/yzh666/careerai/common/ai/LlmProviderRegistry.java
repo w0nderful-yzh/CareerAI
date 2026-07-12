@@ -135,15 +135,6 @@ public class LlmProviderRegistry {
     }
 
     /**
-     * 获取语音面试专用 ChatClient：SkillsTool + ToolCallAdvisor（流式）。
-     * 不加 Memory Advisor（语音面试手动管理对话历史）。
-     */
-    public ChatClient getVoiceChatClient(String providerId) {
-        String id = resolveProviderId(providerId);
-        return clientCache.computeIfAbsent(id + ":voice", key -> createVoiceChatClient(id));
-    }
-
-    /**
      * 清空缓存，重新加载所有 provider。
      */
     public void reload() {
@@ -186,25 +177,6 @@ public class LlmProviderRegistry {
         ChatClient.Builder builder = ChatClient.builder(chatModel);
         buildSafeGuardAdvisor().ifPresent(advisor -> builder.defaultAdvisors(List.of(advisor)));
         log.info("[LlmProviderRegistry] Created plain ChatClient (no tools) for {}", providerId);
-        return builder.build();
-    }
-
-    private ChatClient createVoiceChatClient(String providerId) {
-        OpenAiChatModel chatModel = getChatModel(providerId);
-
-        ChatClient.Builder builder = ChatClient.builder(chatModel);
-        if (interviewSkillsToolCallback != null) {
-            builder.defaultTools(interviewSkillsToolCallback);
-        }
-        List<Advisor> advisors = new ArrayList<>();
-        if (toolCallingManager != null) {
-            advisors.add(buildToolCallAdvisor(true));
-        }
-        buildSafeGuardAdvisor().ifPresent(advisors::add);
-        if (!advisors.isEmpty()) {
-            builder.defaultAdvisors(advisors);
-        }
-        log.info("[LlmProviderRegistry] Created voice ChatClient (SkillsTool + streaming ToolCall) for {}", providerId);
         return builder.build();
     }
 

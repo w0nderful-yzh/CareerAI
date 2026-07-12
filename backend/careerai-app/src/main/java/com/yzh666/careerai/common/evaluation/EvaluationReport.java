@@ -3,7 +3,7 @@ package com.yzh666.careerai.common.evaluation;
 import java.util.List;
 
 /**
- * 通用面试评估报告（文字面试和语音面试共用）
+ * 文字面试评估报告
  */
 public record EvaluationReport(
     String sessionId,

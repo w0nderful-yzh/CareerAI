@@ -37,10 +37,6 @@
       <artifactId>spring-boot-starter-amqp</artifactId>
     </dependency>
     <dependency>
-      <groupId>org.springframework.boot</groupId>
-      <artifactId>spring-boot-starter-websocket</artifactId>
-    </dependency>
-    <dependency>
       <groupId>org.springframework.security</groupId>
       <artifactId>spring-security-crypto</artifactId>
     </dependency>
@@ -130,18 +126,6 @@
       <groupId>com.itextpdf</groupId>
       <artifactId>font-asian</artifactId>
       <version>${itext.version}</version>
-    </dependency>
-
-    <dependency>
-      <groupId>com.alibaba</groupId>
-      <artifactId>dashscope-sdk-java</artifactId>
-      <version>${dashscope.version}</version>
-      <exclusions>
-        <exclusion>
-          <groupId>org.slf4j</groupId>
-          <artifactId>slf4j-simple</artifactId>
-        </exclusion>
-      </exclusions>
     </dependency>
 
     <dependency>

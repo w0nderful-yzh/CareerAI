@@ -1,13 +1,11 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
-import {useNavigate} from 'react-router-dom';
 import {AnimatePresence, motion} from 'framer-motion';
 import {historyApi} from '../api/history';
 import {interviewApi, type TextSessionMeta} from '../api/interview';
-import {voiceInterviewApi, SessionMeta} from '../api/voiceInterview';
 import {formatDate} from '../utils/date';
 import {getScoreProgressColor} from '../utils/score';
 import {skillApi, type SkillDTO} from '../api/skill';
-import {getTemplateName} from '../utils/voiceInterview';
+import {getTemplateName} from '../utils/interview';
 import DeleteConfirmDialog from '../components/DeleteConfirmDialog';
 import {
   AlertCircle,
@@ -18,7 +16,6 @@ import {
   Download,
   FileText,
   Loader2,
-  Mic,
   PlayCircle,
   RefreshCw,
   RotateCcw,
@@ -28,11 +25,11 @@ import {
   Users,
 } from 'lucide-react';
 
-type InterviewType = 'all' | 'text' | 'voice';
+type InterviewType = 'all' | 'text';
 
 interface UnifiedInterviewItem {
   id: string;
-  type: 'text' | 'voice';
+  type: 'text';
   title: string;
   sessionId: string;
   status: string;
@@ -40,12 +37,10 @@ interface UnifiedInterviewItem {
   evaluateError?: string;
   overallScore: number | null;
   totalQuestions?: number;
-  actualDuration?: number;
   createdAt: string;
   resumeId?: number;
   jobId?: number;
   matchReportId?: number;
-  voiceSessionId?: number;
 }
 
 interface InterviewStats {
@@ -56,10 +51,6 @@ interface InterviewStats {
 
 function isCompletedStatus(status: string): boolean {
   return status === 'COMPLETED' || status === 'EVALUATED';
-}
-
-function isLiveStatus(status: string): boolean {
-  return status === 'IN_PROGRESS' || status === 'PAUSED';
 }
 
 function isEvaluateCompleted(item: UnifiedInterviewItem): boolean {
@@ -92,13 +83,6 @@ function getStatusText(item: UnifiedInterviewItem): string {
   if (item.status === 'PAUSED') return '已暂停';
   if (isCompletedStatus(item.status)) return '已提交';
   return '已创建';
-}
-
-function formatDuration(seconds?: number): string {
-  if (!seconds) return '-';
-  const mins = Math.floor(seconds / 60);
-  const secs = seconds % 60;
-  return `${mins}分${secs}秒`;
 }
 
 function StatCard({
@@ -136,20 +120,10 @@ function StatCard({
 }
 
 function TypeBadge({
-  type,
   isJobInterview,
 }: {
-  type: 'text' | 'voice';
   isJobInterview?: boolean;
 }) {
-  if (type === 'voice') {
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 rounded-full text-xs font-medium">
-        <Mic className="w-3 h-3" />
-        语音
-      </span>
-    );
-  }
   return (
     <div className="flex flex-col items-start gap-1.5">
       <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded-full text-xs font-medium">
@@ -185,7 +159,6 @@ function itemsEqual(a: UnifiedInterviewItem[], b: UnifiedInterviewItem[]): boole
 }
 
 export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview, onRestartInterview, onContinueInterview }: InterviewHistoryPageProps) {
-  const navigate = useNavigate();
   const [items, setItems] = useState<UnifiedInterviewItem[]>([]);
   const [stats, setStats] = useState<InterviewStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -208,17 +181,7 @@ export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview,
         skillsLoadedRef.current = true;
       }
       const loadedSkills = skillsRef.current;
-      const [textInterviews, voiceSessions] = await Promise.all([
-        loadTextInterviews(loadedSkills),
-        loadVoiceInterviews(),
-      ]);
-
-      const voiceWithNames = voiceSessions.map(item => {
-        const skillName = getTemplateName(item.title, loadedSkills);
-        return skillName !== item.title ? { ...item, title: skillName } : item;
-      });
-
-      const all = [...textInterviews, ...voiceWithNames];
+      const all = await loadTextInterviews(loadedSkills);
       all.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
       setItems(prev => {
@@ -272,28 +235,6 @@ export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview,
     }
   }
 
-  // Load voice interviews from voice API
-  async function loadVoiceInterviews(): Promise<UnifiedInterviewItem[]> {
-    try {
-      const sessions = await voiceInterviewApi.getAllSessions();
-      return sessions.map((session: SessionMeta) => ({
-        id: `voice-${session.sessionId}`,
-        type: 'voice' as const,
-        title: session.roleType,
-        sessionId: String(session.sessionId),
-        status: session.status,
-        evaluateStatus: session.evaluateStatus,
-        evaluateError: session.evaluateError,
-        overallScore: null,
-        actualDuration: session.actualDuration,
-        createdAt: session.createdAt,
-        voiceSessionId: session.sessionId,
-      }));
-    } catch {
-      return [];
-    }
-  }
-
   useEffect(() => {
     loadAll();
   }, [loadAll]);
@@ -318,16 +259,7 @@ export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview,
   }, [items, loadAll]);
 
   const handleRowClick = (item: UnifiedInterviewItem) => {
-    if (item.type === 'text') {
-      onViewInterview(item.sessionId, item.resumeId);
-    } else if (item.voiceSessionId) {
-      const isLive = isLiveStatus(item.status);
-      if (isLive) {
-        navigate('/voice-interview', { state: { voiceSessionId: item.voiceSessionId } });
-      } else {
-        navigate(`/voice-interview/${item.voiceSessionId}/evaluation`);
-      }
-    }
+    onViewInterview(item.sessionId, item.resumeId);
   };
 
   const handleDeleteClick = (item: UnifiedInterviewItem, e: React.MouseEvent) => {
@@ -339,11 +271,7 @@ export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview,
     if (!deleteItem) return;
     setDeletingSessionId(deleteItem.sessionId);
     try {
-      if (deleteItem.type === 'voice' && deleteItem.voiceSessionId) {
-        await voiceInterviewApi.deleteSession(deleteItem.voiceSessionId);
-      } else {
-        await historyApi.deleteInterview(deleteItem.sessionId);
-      }
+      await historyApi.deleteInterview(deleteItem.sessionId);
       await loadAll();
       setDeleteItem(null);
     } catch (err) {
@@ -433,7 +361,6 @@ export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview,
         {([
           { key: 'all', label: '全部' },
           { key: 'text', label: '文字面试' },
-          { key: 'voice', label: '语音面试' },
         ] as const).map(tab => (
           <button
             key={tab.key}
@@ -501,15 +428,11 @@ export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview,
                     className="border-b border-slate-50 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50 cursor-pointer transition-colors group"
                   >
                     <td className="px-6 py-4">
-                      <TypeBadge type={item.type} isJobInterview={item.jobId != null} />
+                      <TypeBadge isJobInterview={item.jobId != null} />
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        {item.type === 'text' ? (
-                          <FileText className="w-5 h-5 text-slate-400" />
-                        ) : (
-                          <Mic className="w-5 h-5 text-purple-400" />
-                        )}
+                        <FileText className="w-5 h-5 text-slate-400" />
                         <div>
                           <p className="font-medium text-slate-800 dark:text-white">{item.title}</p>
                           <p className="text-xs text-slate-400 dark:text-slate-500">#{item.id.slice(-8)}</p>
@@ -544,7 +467,7 @@ export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview,
                       )}
                     </td>
                     <td className="px-6 py-4">
-                      {item.type === 'text' && item.totalQuestions != null ? (
+                      {item.totalQuestions != null ? (
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-sm">
                             {item.totalQuestions} 题
@@ -556,10 +479,6 @@ export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview,
                             </span>
                           )}
                         </div>
-                      ) : item.type === 'voice' ? (
-                        <span className="text-sm text-slate-500 dark:text-slate-400">
-                          {formatDuration(item.actualDuration)}
-                        </span>
                       ) : (
                         <span className="text-slate-400">-</span>
                       )}
@@ -569,7 +488,7 @@ export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview,
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-1">
-                        {item.type === 'text' && !isCompletedStatus(item.status) && !isEvaluateCompleted(item) && onContinueInterview && (
+                        {!isCompletedStatus(item.status) && !isEvaluateCompleted(item) && onContinueInterview && (
                           <button
                             onClick={(e) => { e.stopPropagation(); onContinueInterview(item.sessionId); }}
                             className="p-2 text-slate-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
@@ -578,16 +497,7 @@ export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview,
                             <PlayCircle className="w-4 h-4" />
                           </button>
                         )}
-                        {item.type === 'voice' && isLiveStatus(item.status) && item.voiceSessionId && (
-                          <button
-                            onClick={(e) => { e.stopPropagation(); navigate('/voice-interview', { state: { voiceSessionId: item.voiceSessionId } }); }}
-                            className="p-2 text-slate-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
-                            title="继续面试"
-                          >
-                            <PlayCircle className="w-4 h-4" />
-                          </button>
-                        )}
-                        {isEvaluateCompleted(item) && item.type === 'text' && (
+                        {isEvaluateCompleted(item) && (
                           <button
                             onClick={(e) => handleExport(item.sessionId, e)}
                             disabled={exporting === item.sessionId}
@@ -601,7 +511,7 @@ export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview,
                             )}
                           </button>
                         )}
-                        {isEvaluateCompleted(item) && item.type === 'text' && item.resumeId && onRestartInterview && (
+                        {isEvaluateCompleted(item) && item.resumeId && onRestartInterview && (
                           <button
                             onClick={(e) => { e.stopPropagation(); onRestartInterview(item.resumeId!); }}
                             className="p-2 text-slate-400 hover:text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded-lg transition-colors"

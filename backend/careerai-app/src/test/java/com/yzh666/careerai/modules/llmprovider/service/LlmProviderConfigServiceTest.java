@@ -7,9 +7,6 @@ import com.yzh666.careerai.common.exception.ErrorCode;
 import com.yzh666.careerai.modules.llmprovider.dto.CreateProviderRequest;
 import com.yzh666.careerai.modules.llmprovider.dto.DefaultProviderDTO;
 import com.yzh666.careerai.modules.llmprovider.dto.UpdateProviderRequest;
-import com.yzh666.careerai.modules.voiceinterview.config.VoiceInterviewProperties;
-import com.yzh666.careerai.modules.voiceinterview.service.QwenAsrService;
-import com.yzh666.careerai.modules.voiceinterview.service.QwenTtsService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -46,9 +43,6 @@ class LlmProviderConfigServiceTest {
 
     @Mock private LlmProviderProperties properties;
     @Mock private LlmProviderRegistry registry;
-    @Mock private VoiceInterviewProperties voiceProperties;
-    @Mock private QwenAsrService asrService;
-    @Mock private QwenTtsService ttsService;
 
     private LlmProviderConfigService service;
 
@@ -68,10 +62,7 @@ class LlmProviderConfigServiceTest {
 
         service = new LlmProviderConfigService(
             properties,
-            registry,
-            voiceProperties,
-            asrService,
-            ttsService
+            registry
         );
     }
 
@@ -90,7 +81,7 @@ class LlmProviderConfigServiceTest {
             when(properties.getConfigEnvPath()).thenReturn(tempDir.resolve(".env").toString());
 
             LlmProviderConfigService failing = new LlmProviderConfigService(
-                properties, registry, voiceProperties, asrService, ttsService);
+                properties, registry);
 
             assertThrows(BusinessException.class, failing::validateWritablePaths);
         }
@@ -280,7 +271,7 @@ class LlmProviderConfigServiceTest {
             when(properties.getConfigYamlPath()).thenReturn(null);
             when(properties.getConfigEnvPath()).thenReturn(envFile.toString());
             return new LlmProviderConfigService(
-                properties, registry, voiceProperties, asrService, ttsService);
+                properties, registry);
         }
 
         @Test
@@ -331,7 +322,7 @@ class LlmProviderConfigServiceTest {
             when(properties.getConfigEnvPath()).thenReturn(null);
 
             LlmProviderConfigService nullEnvService = new LlmProviderConfigService(
-                properties, registry, voiceProperties, asrService, ttsService);
+                properties, registry);
 
             assertDoesNotThrow(() -> nullEnvService.createProvider(
                 new CreateProviderRequest("test", "http://localhost", "key", "model", null, null)));
@@ -364,7 +355,7 @@ class LlmProviderConfigServiceTest {
             when(properties.getConfigEnvPath()).thenReturn(null);
 
             LlmProviderConfigService yamlService = new LlmProviderConfigService(
-                properties, registry, voiceProperties, asrService, ttsService);
+                properties, registry);
 
             when(properties.getProviders()).thenReturn(new HashMap<>());
 
@@ -385,17 +376,16 @@ class LlmProviderConfigServiceTest {
                 app:
                   ai:
                     default-provider: dashscope
-                  voice-interview:
-                    qwen:
-                      asr:
-                        model: qwen3-asr-flash-realtime
+                  rag:
+                    search:
+                      topk-medium: 12
                 """);
 
             when(properties.getConfigYamlPath()).thenReturn(yamlFile.toString());
             when(properties.getConfigEnvPath()).thenReturn(null);
 
             LlmProviderConfigService yamlService = new LlmProviderConfigService(
-                properties, registry, voiceProperties, asrService, ttsService);
+                properties, registry);
 
             when(properties.getProviders()).thenReturn(new HashMap<>());
 
@@ -404,7 +394,7 @@ class LlmProviderConfigServiceTest {
 
             String content = Files.readString(yamlFile, StandardCharsets.UTF_8);
             assertTrue(content.contains("default-provider"));
-            assertTrue(content.contains("qwen3-asr-flash-realtime"));
+            assertTrue(content.contains("topk-medium"));
             assertTrue(content.contains("kimi"));
         }
 
@@ -415,7 +405,7 @@ class LlmProviderConfigServiceTest {
             when(properties.getConfigEnvPath()).thenReturn(null);
 
             LlmProviderConfigService nullYamlService = new LlmProviderConfigService(
-                properties, registry, voiceProperties, asrService, ttsService);
+                properties, registry);
 
             assertDoesNotThrow(() -> nullYamlService.createProvider(
                 new CreateProviderRequest("test", "http://localhost", "key", "model", null, null)));

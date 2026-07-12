@@ -2,33 +2,29 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
-  ChevronDown, ChevronUp, FileStack, FileText, Loader2, Mic,
+  ChevronDown, ChevronUp, FileStack, FileText, Loader2,
   RefreshCw, Sparkles,
 } from 'lucide-react';
 import { type SkillDTO } from '../api/skill';
 import { interviewApi, type TextSessionMeta } from '../api/interview';
-import { voiceInterviewApi, type SessionMeta } from '../api/voiceInterview';
 import { getSkillIcon } from '../utils/skillIcons';
-import { getTemplateName } from '../utils/voiceInterview';
+import { getTemplateName } from '../utils/interview';
 import { getScoreTextColor } from '../utils/score';
 import { formatDateTime } from '../utils/date';
 import {
   useInterviewConfig,
   CUSTOM_SKILL_ID,
-  type InterviewMode,
   DIFFICULTY_OPTIONS,
 } from '../hooks/useInterviewConfig';
 
 // 统一的面试记录项
 interface RecentInterviewItem {
   id: string;
-  type: 'text' | 'voice';
   title: string;
   status: string;
   evaluateStatus?: string | null;
   overallScore: number | null;
   createdAt: string;
-  voiceSessionId?: number;
 }
 
 export default function InterviewHubPage() {
@@ -43,29 +39,16 @@ export default function InterviewHubPage() {
   const loadRecentInterviews = useCallback(async (allSkills: SkillDTO[]) => {
     setLoadingRecent(true);
     try {
-      const [textSessions, voiceSessions] = await Promise.all([
-        interviewApi.listSessions().catch(() => [] as TextSessionMeta[]),
-        voiceInterviewApi.getAllSessions().catch(() => [] as SessionMeta[]),
-      ]);
+      const textSessions = await interviewApi.listSessions().catch(() => [] as TextSessionMeta[]);
 
       const items: RecentInterviewItem[] = [
         ...textSessions.map(s => ({
           id: s.sessionId,
-          type: 'text' as const,
           title: getTemplateName(s.skillId, allSkills),
           status: s.status,
           evaluateStatus: s.evaluateStatus,
           overallScore: s.overallScore,
           createdAt: s.createdAt,
-        })),
-        ...voiceSessions.map(s => ({
-          id: `voice-${s.sessionId}`,
-          type: 'voice' as const,
-          title: s.roleType || '语音面试',
-          status: s.status,
-          overallScore: null,
-          createdAt: s.createdAt,
-          voiceSessionId: s.sessionId,
         })),
       ];
 
@@ -96,38 +79,20 @@ export default function InterviewHubPage() {
       return;
     }
 
-    if (config.mode === 'text') {
-      navigate('/interview', {
-        state: {
-          resumeId: config.resumeId,
-          interviewConfig: {
-            skillId: config.skillId,
-            skillName,
-            difficulty: config.difficulty,
-            questionCount: config.questionCount,
-            llmProvider: config.llmProvider,
-            jdText: config.isCustomSkill ? config.parsedCustomJdText : undefined,
-            customCategories: config.isCustomSkill ? config.customCategories : undefined,
-          },
+    navigate('/interview', {
+      state: {
+        resumeId: config.resumeId,
+        interviewConfig: {
+          skillId: config.skillId,
+          skillName,
+          difficulty: config.difficulty,
+          questionCount: config.questionCount,
+          llmProvider: config.llmProvider,
+          jdText: config.isCustomSkill ? config.parsedCustomJdText : undefined,
+          customCategories: config.isCustomSkill ? config.customCategories : undefined,
         },
-      });
-    } else {
-      const params = new URLSearchParams({ skillId: config.skillId, difficulty: config.difficulty });
-      navigate(`/voice-interview?${params.toString()}`, {
-        state: {
-          voiceConfig: {
-            skillId: config.skillId,
-            difficulty: config.difficulty,
-            techEnabled: true,
-            projectEnabled: true,
-            hrEnabled: true,
-            plannedDuration: config.plannedDuration,
-            resumeId: config.resumeId,
-            llmProvider: config.llmProvider,
-          },
-        },
-      });
-    }
+      },
+    });
   };
 
   return (
@@ -138,62 +103,17 @@ export default function InterviewHubPage() {
           <Sparkles className="w-7 h-7 text-primary-500" />
           模拟面试
         </h1>
-        <p className="text-slate-500 dark:text-slate-400 mt-1">选择面试模式和方向，快速开始练习</p>
+        <p className="text-slate-500 dark:text-slate-400 mt-1">选择面试方向，快速开始文字练习</p>
       </div>
 
       {/* 配置区域 */}
       <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6 mb-8">
         <div className="space-y-6">
-          {/* 面试模式 */}
-          <div>
-            <label className="flex items-center gap-2 mb-3 text-sm font-semibold text-slate-700 dark:text-slate-200">
-              面试模式
-            </label>
-            <div className="grid grid-cols-2 gap-3">
-              {([
-                {
-                  value: 'text' as InterviewMode,
-                  label: '文字面试',
-                  icon: FileText,
-                  desc: '推荐：更稳定，更适合系统化刷题与复盘',
-                  recommended: true,
-                },
-                {
-                  value: 'voice' as InterviewMode,
-                  label: '语音面试',
-                  icon: Mic,
-                  desc: '实时语音对话，更偏临场模拟',
-                  recommended: false,
-                },
-              ]).map(opt => {
-                const Icon = opt.icon;
-                const selected = config.mode === opt.value;
-                return (
-                  <button
-                    key={opt.value}
-                    onClick={() => config.setMode(opt.value)}
-                    className={`flex items-center gap-3 p-4 rounded-xl border-2 transition-all duration-200 text-left
-                      ${selected
-                        ? 'border-primary-500 bg-primary-50/80 dark:bg-primary-900/20'
-                        : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600'
-                      }`}
-                  >
-                    <Icon className={`w-6 h-6 flex-shrink-0 ${selected ? 'text-primary-500' : 'text-slate-400'}`} />
-                    <div className="min-w-0">
-                      <p className={`font-semibold text-sm flex items-center gap-2 ${selected ? 'text-primary-700 dark:text-primary-300' : 'text-slate-900 dark:text-white'}`}>
-                        <span>{opt.label}</span>
-                        {opt.recommended && (
-                          <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
-                            推荐
-                          </span>
-                        )}
-                      </p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">{opt.desc}</p>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
+          <div className="rounded-xl border border-primary-100 dark:border-primary-800/30 bg-primary-50/80 dark:bg-primary-900/20 px-4 py-3">
+            <p className="text-sm font-semibold text-primary-700 dark:text-primary-300">文字面试</p>
+            <p className="text-xs text-primary-600/80 dark:text-primary-300/80 mt-1">
+              当前版本聚焦稳定的文字问答、评分和复盘，便于作为简历项目演示。
+            </p>
           </div>
 
           {/* 面试方向 */}
@@ -386,55 +306,26 @@ export default function InterviewHubPage() {
                   </select>
                 </div>
 
-                {/* 文字面试 - 题目数 */}
-                {config.mode === 'text' && (
-                  <div>
-                    <label className="flex items-center gap-2 mb-3 text-sm font-semibold text-slate-700 dark:text-slate-200">
-                      题目数量
-                    </label>
-                    <div className="flex gap-2">
-                      {[6, 8, 10, 12].map(n => (
-                        <button
-                          key={n}
-                          onClick={() => config.setQuestionCount(n)}
-                          className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all
-                            ${config.questionCount === n
-                              ? 'bg-primary-500 text-white shadow-sm'
-                              : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
-                            }`}
-                        >
-                          {n} 题
-                        </button>
-                      ))}
-                    </div>
+                <div>
+                  <label className="flex items-center gap-2 mb-3 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                    题目数量
+                  </label>
+                  <div className="flex gap-2">
+                    {[6, 8, 10, 12].map(n => (
+                      <button
+                        key={n}
+                        onClick={() => config.setQuestionCount(n)}
+                        className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all
+                          ${config.questionCount === n
+                            ? 'bg-primary-500 text-white shadow-sm'
+                            : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
+                          }`}
+                      >
+                        {n} 题
+                      </button>
+                    ))}
                   </div>
-                )}
-
-                {/* 语音面试 - 时长 */}
-                {config.mode === 'voice' && (
-                  <div className="bg-slate-50/80 dark:bg-slate-900/50 rounded-xl p-4 border border-slate-200 dark:border-slate-700">
-                    <div className="flex items-center justify-between mb-3">
-                      <p className="font-semibold text-sm text-slate-900 dark:text-white">计划面试时长</p>
-                      <div className="text-2xl font-bold tabular-nums text-primary-600 dark:text-primary-400">
-                        {config.plannedDuration}
-                        <span className="text-xs font-normal text-slate-400 ml-0.5">min</span>
-                      </div>
-                    </div>
-                    <input
-                      type="range"
-                      min="15"
-                      max="60"
-                      step="5"
-                      value={config.plannedDuration}
-                      onChange={e => config.setPlannedDuration(parseInt(e.target.value))}
-                      className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer
-                        [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4
-                        [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full
-                        [&::-webkit-slider-thumb]:bg-primary-500 [&::-webkit-slider-thumb]:cursor-pointer
-                        [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:shadow-primary-500/30"
-                    />
-                  </div>
-                )}
+                </div>
               </motion.div>
             )}
           </AnimatePresence>
@@ -451,7 +342,7 @@ export default function InterviewHubPage() {
               bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700
               text-white shadow-lg shadow-primary-500/25 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            开始{config.mode === 'text' ? '文字' : '语音'}面试
+            开始文字面试
           </motion.button>
         </div>
       </div>
@@ -487,34 +378,20 @@ export default function InterviewHubPage() {
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.05 }}
-                  onClick={() => {
-                    if (item.type === 'text') {
-                      navigate(`/interviews/${item.id}`);
-                    } else if (item.voiceSessionId) {
-                      navigate(`/voice-interview/${item.voiceSessionId}/evaluation`);
-                    }
-                  }}
+                  onClick={() => navigate(`/interviews/${item.id}`)}
                   className="flex items-center gap-4 p-4 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors cursor-pointer group"
                 >
                   {/* 类型图标 */}
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                    item.type === 'text'
-                      ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
-                      : 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400'
-                  }`}>
-                    {item.type === 'text' ? <FileText className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
+                    <FileText className="w-5 h-5" />
                   </div>
 
                   {/* 信息 */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="font-medium text-sm text-slate-800 dark:text-white truncate">{item.title}</span>
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${
-                        item.type === 'text'
-                          ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
-                          : 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400'
-                      }`}>
-                        {item.type === 'text' ? '文字' : '语音'}
+                      <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400">
+                        文字
                       </span>
                     </div>
                     <div className="flex items-center gap-3 mt-1">

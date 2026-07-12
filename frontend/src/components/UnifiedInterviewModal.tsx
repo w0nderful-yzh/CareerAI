@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
-  X, Sparkles, FileText, Mic,
+  X, Sparkles,
   FileStack, ChevronDown, ChevronUp, Loader2
 } from 'lucide-react';
 import { useInterviewConfig, CUSTOM_SKILL_ID, DIFFICULTY_OPTIONS, type InterviewMode, type Difficulty } from '../hooks/useInterviewConfig';
@@ -23,7 +23,6 @@ export interface UnifiedInterviewConfig {
   techEnabled: boolean;
   projectEnabled: boolean;
   hrEnabled: boolean;
-  plannedDuration: number;
   customJdText?: string;
   customCategories?: import('../api/skill').CategoryDTO[];
 }
@@ -84,7 +83,6 @@ export default function UnifiedInterviewModal({
       techEnabled: true,
       projectEnabled: true,
       hrEnabled: true,
-      plannedDuration: config.plannedDuration,
       customJdText: config.isCustomSkill ? config.parsedCustomJdText : undefined,
       customCategories: config.isCustomSkill ? config.customCategories : undefined,
     });
@@ -139,55 +137,11 @@ export default function UnifiedInterviewModal({
               {/* Content */}
               <div className="px-6 py-5 space-y-5">
                 {!hideModeSwitch && (
-                  <div>
-                    <label className="flex items-center gap-2 mb-3 text-sm font-semibold text-slate-700 dark:text-slate-200">
-                      面试模式
-                    </label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {([
-                        {
-                          value: 'text' as InterviewMode,
-                          label: '文字面试',
-                          icon: FileText,
-                          desc: '推荐：更稳定，更适合系统化练习',
-                          recommended: true,
-                        },
-                        {
-                          value: 'voice' as InterviewMode,
-                          label: '语音面试',
-                          icon: Mic,
-                          desc: '实时语音对话，偏临场模拟',
-                          recommended: false,
-                        },
-                      ]).map(opt => {
-                        const Icon = opt.icon;
-                        const selected = config.mode === opt.value;
-                        return (
-                          <button
-                            key={opt.value}
-                            onClick={() => config.setMode(opt.value)}
-                            className={`flex items-center gap-3 p-3 rounded-xl border-2 transition-all duration-200 text-left
-                              ${selected
-                                ? 'border-primary-500 bg-primary-50/80 dark:bg-primary-900/20'
-                                : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600'
-                              }`}
-                          >
-                            <Icon className={`w-5 h-5 flex-shrink-0 ${selected ? 'text-primary-500' : 'text-slate-400'}`} />
-                            <div className="min-w-0">
-                              <p className={`font-semibold text-sm flex items-center gap-2 ${selected ? 'text-primary-700 dark:text-primary-300' : 'text-slate-900 dark:text-white'}`}>
-                                <span>{opt.label}</span>
-                                {opt.recommended && (
-                                  <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
-                                    推荐
-                                  </span>
-                                )}
-                              </p>
-                              <p className="text-[11px] text-slate-500 dark:text-slate-400">{opt.desc}</p>
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
+                  <div className="rounded-xl border border-primary-100 dark:border-primary-800/30 bg-primary-50/80 dark:bg-primary-900/20 px-4 py-3">
+                    <p className="text-sm font-semibold text-primary-700 dark:text-primary-300">文字面试</p>
+                    <p className="text-xs text-primary-600/80 dark:text-primary-300/80 mt-1">
+                      当前版本聚焦纯文字面试，便于稳定生成题目、答案和复盘报告。
+                    </p>
                   </div>
                 )}
 
@@ -386,55 +340,26 @@ export default function UnifiedInterviewModal({
                         </select>
                       </div>
 
-                      {/* 文字面试 - 题目数 */}
-                      {config.mode === 'text' && (
-                        <div>
-                          <label className="flex items-center gap-2 mb-3 text-sm font-semibold text-slate-700 dark:text-slate-200">
-                            题目数量
-                          </label>
-                          <div className="flex gap-2">
-                            {[6, 8, 10, 12].map(n => (
-                              <button
-                                key={n}
-                                onClick={() => config.setQuestionCount(n)}
-                                className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all
-                                  ${config.questionCount === n
-                                    ? 'bg-primary-500 text-white shadow-sm'
-                                    : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
-                                  }`}
-                              >
-                                {n} 题
-                              </button>
-                            ))}
-                          </div>
+                      <div>
+                        <label className="flex items-center gap-2 mb-3 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                          题目数量
+                        </label>
+                        <div className="flex gap-2">
+                          {[6, 8, 10, 12].map(n => (
+                            <button
+                              key={n}
+                              onClick={() => config.setQuestionCount(n)}
+                              className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all
+                                ${config.questionCount === n
+                                  ? 'bg-primary-500 text-white shadow-sm'
+                                  : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
+                                }`}
+                            >
+                              {n} 题
+                            </button>
+                          ))}
                         </div>
-                      )}
-
-                      {/* 语音面试 - 时长 */}
-                      {config.mode === 'voice' && (
-                        <div className="bg-slate-50/80 dark:bg-slate-900/50 rounded-xl p-4 border border-slate-200 dark:border-slate-700">
-                          <div className="flex items-center justify-between mb-3">
-                            <p className="font-semibold text-sm text-slate-900 dark:text-white">计划面试时长</p>
-                            <div className="text-2xl font-bold tabular-nums text-primary-600 dark:text-primary-400">
-                              {config.plannedDuration}
-                              <span className="text-xs font-normal text-slate-400 ml-0.5">min</span>
-                            </div>
-                          </div>
-                          <input
-                            type="range"
-                            min="15"
-                            max="60"
-                            step="5"
-                            value={config.plannedDuration}
-                            onChange={e => config.setPlannedDuration(parseInt(e.target.value))}
-                            className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer
-                              [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4
-                              [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full
-                              [&::-webkit-slider-thumb]:bg-primary-500 [&::-webkit-slider-thumb]:cursor-pointer
-                              [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:shadow-primary-500/30"
-                          />
-                        </div>
-                      )}
+                      </div>
                     </motion.div>
                   )}
                 </AnimatePresence>

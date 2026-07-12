@@ -6,7 +6,7 @@ import {getScoreColor} from '../utils/score';
 import type {InterviewItem} from '../api/history';
 import {historyApi} from '../api/history';
 import ConfirmDialog from './ConfirmDialog';
-import {Calendar, ChevronRight, Download, MessageSquare, Mic, Trash2, TrendingUp} from 'lucide-react';
+import {Calendar, ChevronRight, Download, MessageSquare, Trash2, TrendingUp} from 'lucide-react';
 
 interface InterviewPanelProps {
   interviews: InterviewItem[];
@@ -71,7 +71,7 @@ export default function InterviewPanel({
         <div className="bg-white dark:bg-slate-800 rounded-2xl p-12 text-center">
           <div
               className="w-16 h-16 mx-auto mb-6 bg-slate-100 dark:bg-slate-700 rounded-full flex items-center justify-center">
-          <Mic className="w-8 h-8 text-slate-400" />
+          <MessageSquare className="w-8 h-8 text-slate-400" />
         </div>
           <h3 className="text-xl font-semibold text-slate-700 dark:text-slate-300 mb-2">暂无面试记录</h3>
           <p className="text-slate-500 dark:text-slate-400 mb-6">开始模拟面试，获取专业评估</p>
