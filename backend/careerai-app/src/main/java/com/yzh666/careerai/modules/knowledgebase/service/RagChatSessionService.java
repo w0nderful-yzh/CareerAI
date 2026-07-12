@@ -7,11 +7,14 @@ import com.yzh666.careerai.infrastructure.mapper.RagChatMapper;
 import com.yzh666.careerai.modules.knowledgebase.model.KnowledgeBaseEntity;
 import com.yzh666.careerai.modules.knowledgebase.model.KnowledgeBaseListItemDTO;
 import com.yzh666.careerai.modules.knowledgebase.model.RagChatDTO.CreateSessionRequest;
+import com.yzh666.careerai.modules.knowledgebase.model.RagChatDTO.MessageDTO;
 import com.yzh666.careerai.modules.knowledgebase.model.RagChatDTO.SessionDTO;
 import com.yzh666.careerai.modules.knowledgebase.model.RagChatDTO.SessionDetailDTO;
 import com.yzh666.careerai.modules.knowledgebase.model.RagChatDTO.SessionListItemDTO;
 import com.yzh666.careerai.modules.knowledgebase.model.RagChatMessageEntity;
 import com.yzh666.careerai.modules.knowledgebase.model.RagChatSessionEntity;
+import com.yzh666.careerai.modules.knowledgebase.model.RagSourceDTO;
+import com.yzh666.careerai.modules.knowledgebase.model.RagStreamAnswer;
 import com.yzh666.careerai.modules.knowledgebase.repository.KnowledgeBaseRepository;
 import com.yzh666.careerai.modules.knowledgebase.repository.RagChatMessageRepository;
 import com.yzh666.careerai.modules.knowledgebase.repository.RagChatSessionRepository;
@@ -25,6 +28,8 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
 
 import java.util.HashSet;
 import java.util.List;
@@ -46,6 +51,7 @@ public class RagChatSessionService {
     private final KnowledgeBaseMapper knowledgeBaseMapper;
     private final KnowledgeBaseQueryProperties queryProperties;
     private final CurrentUserService currentUserService;
+    private final ObjectMapper objectMapper;
 
     /**
      * 创建新会话
@@ -105,7 +111,18 @@ public class RagChatSessionService {
             new java.util.ArrayList<>(session.getKnowledgeBases())
         );
 
-        return ragChatMapper.toSessionDetailDTO(session, messages, kbDTOs);
+        List<MessageDTO> messageDTOs = messages.stream()
+            .map(this::toMessageDTO)
+            .toList();
+
+        return new SessionDetailDTO(
+            session.getId(),
+            session.getTitle(),
+            kbDTOs,
+            messageDTOs,
+            session.getCreatedAt(),
+            session.getUpdatedAt()
+        );
     }
 
     /**
@@ -153,10 +170,19 @@ public class RagChatSessionService {
      */
     @Transactional
     public void completeStreamMessage(Long messageId, String content) {
+        completeStreamMessage(messageId, content, List.of());
+    }
+
+    /**
+     * 流式响应完成后更新消息，并保存本轮检索来源。
+     */
+    @Transactional
+    public void completeStreamMessage(Long messageId, String content, List<RagSourceDTO> sources) {
         RagChatMessageEntity message = messageRepository.findByIdAndSession_UserId(messageId, currentUserService.currentUserId())
             .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "消息不存在"));
 
         message.setContent(content);
+        message.setSourcesJson(writeSourcesJson(sources));
         message.setCompleted(true);
         messageRepository.save(message);
 
@@ -167,6 +193,13 @@ public class RagChatSessionService {
      * 获取流式回答（带多轮上下文）
      */
     public Flux<String> getStreamAnswer(Long sessionId, String question) {
+        return getStreamAnswerWithSources(sessionId, question).content();
+    }
+
+    /**
+     * 获取流式回答（带多轮上下文和检索来源）
+     */
+    public RagStreamAnswer getStreamAnswerWithSources(Long sessionId, String question) {
         RagChatSessionEntity session = sessionRepository.findByIdAndUserIdWithKnowledgeBases(sessionId, currentUserService.currentUserId())
             .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "会话不存在"));
 
@@ -175,7 +208,7 @@ public class RagChatSessionService {
             ? loadHistoryMessages(sessionId) : List.of();
 
         log.info("加载历史上下文: sessionId={}, historySize={}", sessionId, history.size());
-        return queryService.answerQuestionStream(kbIds, question, history);
+        return queryService.answerQuestionStreamWithSources(kbIds, question, history);
     }
 
     /**
@@ -265,6 +298,41 @@ public class RagChatSessionService {
                 ? (Message) new UserMessage(m.getContent())
                 : (Message) new AssistantMessage(m.getContent()))
             .toList();
+    }
+
+    private MessageDTO toMessageDTO(RagChatMessageEntity message) {
+        return new MessageDTO(
+            message.getId(),
+            message.getTypeString(),
+            message.getContent(),
+            readSourcesJson(message.getSourcesJson()),
+            message.getCreatedAt()
+        );
+    }
+
+    private String writeSourcesJson(List<RagSourceDTO> sources) {
+        if (sources == null || sources.isEmpty()) {
+            return null;
+        }
+        try {
+            return objectMapper.writeValueAsString(sources);
+        } catch (Exception e) {
+            log.warn("序列化 RAG 来源失败: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    private List<RagSourceDTO> readSourcesJson(String sourcesJson) {
+        if (sourcesJson == null || sourcesJson.isBlank()) {
+            return List.of();
+        }
+        try {
+            return objectMapper.readValue(sourcesJson, new TypeReference<>() {
+            });
+        } catch (Exception e) {
+            log.warn("解析 RAG 来源失败: {}", e.getMessage());
+            return List.of();
+        }
     }
 
     private String generateTitle(List<KnowledgeBaseEntity> knowledgeBases) {

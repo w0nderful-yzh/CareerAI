@@ -23,7 +23,18 @@ export interface RagChatMessage {
   id: number;
   type: 'user' | 'assistant';
   content: string;
+  sources: RagSource[];
   createdAt: string;
+}
+
+export interface RagSource {
+  knowledgeBaseId: number | null;
+  knowledgeBaseName: string | null;
+  category: string | null;
+  originalFilename: string | null;
+  chunkIndex: number | null;
+  snippet: string;
+  score: number | null;
 }
 
 export interface KnowledgeBaseItem {
@@ -112,7 +123,8 @@ export const ragChatApi = {
     question: string,
     onMessage: (chunk: string) => void,
     onComplete: () => void,
-    onError: (error: Error) => void
+    onError: (error: Error) => void,
+    onSources?: (sources: RagSource[]) => void
   ): Promise<void> {
     return streamSse({
       url: `/api/rag-chat/sessions/${sessionId}/messages/stream`,
@@ -122,6 +134,17 @@ export const ragChatApi = {
         body: JSON.stringify({ question }),
       },
       onMessage,
+      onEvent: (eventName, data) => {
+        if (eventName !== 'rag_sources' || !onSources) {
+          return;
+        }
+        try {
+          onSources(JSON.parse(data) as RagSource[]);
+        } catch (error) {
+          console.warn('解析 RAG 来源失败:', error);
+          onSources([]);
+        }
+      },
       onComplete,
       onError,
       parseMode: 'event',

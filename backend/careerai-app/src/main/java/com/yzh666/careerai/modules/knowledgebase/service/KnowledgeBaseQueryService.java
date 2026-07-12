@@ -6,6 +6,10 @@ import com.yzh666.careerai.common.exception.BusinessException;
 import com.yzh666.careerai.common.exception.ErrorCode;
 import com.yzh666.careerai.modules.knowledgebase.model.QueryRequest;
 import com.yzh666.careerai.modules.knowledgebase.model.QueryResponse;
+import com.yzh666.careerai.modules.knowledgebase.model.RagSearchFilter;
+import com.yzh666.careerai.modules.knowledgebase.model.RagSourceDTO;
+import com.yzh666.careerai.modules.knowledgebase.model.RagStreamAnswer;
+import com.yzh666.careerai.modules.user.service.CurrentUserService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.AssistantMessage;
@@ -24,6 +28,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -44,6 +49,7 @@ public class KnowledgeBaseQueryService {
     private final KnowledgeBaseVectorService vectorService;
     private final KnowledgeBaseListService listService;
     private final KnowledgeBaseCountService countService;
+    private final CurrentUserService currentUserService;
     private final PromptTemplate systemPromptTemplate;
     private final PromptTemplate userPromptTemplate;
     private final PromptTemplate rewritePromptTemplate;
@@ -60,12 +66,14 @@ public class KnowledgeBaseQueryService {
             KnowledgeBaseVectorService vectorService,
             KnowledgeBaseListService listService,
             KnowledgeBaseCountService countService,
+            CurrentUserService currentUserService,
             KnowledgeBaseQueryProperties queryProperties,
             ResourceLoader resourceLoader) throws IOException {
         this.llmProviderRegistry = llmProviderRegistry;
         this.vectorService = vectorService;
         this.listService = listService;
         this.countService = countService;
+        this.currentUserService = currentUserService;
         this.systemPromptTemplate = new PromptTemplate(
             resourceLoader.getResource(queryProperties.getSystemPromptPath())
                 .getContentAsString(StandardCharsets.UTF_8)
@@ -110,18 +118,27 @@ public class KnowledgeBaseQueryService {
      * @return AI回答
      */
     public String answerQuestion(List<Long> knowledgeBaseIds, String question) {
+        return answerQuestionWithSources(knowledgeBaseIds, question, null).answer();
+    }
+
+    public RagAnswerResult answerQuestionWithSources(
+        List<Long> knowledgeBaseIds,
+        String question,
+        RagSearchFilter filter
+    ) {
         log.info("收到知识库提问: kbIds={}, question={}", knowledgeBaseIds, question);
         if (knowledgeBaseIds == null || knowledgeBaseIds.isEmpty() || normalizeQuestion(question).isBlank()) {
-            return NO_RESULT_RESPONSE;
+            return new RagAnswerResult(NO_RESULT_RESPONSE, List.of());
         }
 
         countService.updateQuestionCounts(knowledgeBaseIds);
 
         QueryContext queryContext = buildQueryContext(question, List.of());
-        List<Document> relevantDocs = retrieveRelevantDocs(queryContext, knowledgeBaseIds);
+        List<Document> relevantDocs = retrieveRelevantDocs(queryContext, knowledgeBaseIds, normalizeFilter(filter));
+        List<RagSourceDTO> sources = buildSources(relevantDocs);
 
         if (!hasEffectiveHit(relevantDocs)) {
-            return NO_RESULT_RESPONSE;
+            return new RagAnswerResult(NO_RESULT_RESPONSE, List.of());
         }
 
         String context = relevantDocs.stream()
@@ -140,7 +157,7 @@ public class KnowledgeBaseQueryService {
             answer = normalizeAnswer(answer);
 
             log.info("知识库问答完成: kbIds={}", knowledgeBaseIds);
-            return answer;
+            return new RagAnswerResult(answer, sources);
 
         } catch (Exception e) {
             log.error("知识库问答失败: {}", e.getMessage(), e);
@@ -170,7 +187,11 @@ public class KnowledgeBaseQueryService {
      * 查询知识库并返回完整响应
      */
     public QueryResponse queryKnowledgeBase(QueryRequest request) {
-        String answer = answerQuestion(request.knowledgeBaseIds(), request.question());
+        RagAnswerResult result = answerQuestionWithSources(
+            request.knowledgeBaseIds(),
+            request.question(),
+            new RagSearchFilter(currentUserIdOrNull(), request.categories(), request.keyword())
+        );
 
         // 获取知识库名称（多个知识库用逗号分隔）
         List<String> kbNames = listService.getKnowledgeBaseNames(request.knowledgeBaseIds());
@@ -179,7 +200,7 @@ public class KnowledgeBaseQueryService {
         // 使用第一个知识库ID作为主要标识（兼容前端）
         Long primaryKbId = request.knowledgeBaseIds().getFirst();
 
-        return new QueryResponse(answer, primaryKbId, kbNamesStr);
+        return new QueryResponse(result.answer(), primaryKbId, kbNamesStr, result.sources());
     }
 
     /**
@@ -202,10 +223,18 @@ public class KnowledgeBaseQueryService {
      * @return 流式响应
      */
     public Flux<String> answerQuestionStream(List<Long> knowledgeBaseIds, String question, List<Message> history) {
+        return answerQuestionStreamWithSources(knowledgeBaseIds, question, history).content();
+    }
+
+    public RagStreamAnswer answerQuestionStreamWithSources(
+        List<Long> knowledgeBaseIds,
+        String question,
+        List<Message> history
+    ) {
         log.info("收到知识库流式提问: kbIds={}, question={}, historySize={}", knowledgeBaseIds, question,
                 history != null ? history.size() : 0);
         if (knowledgeBaseIds == null || knowledgeBaseIds.isEmpty() || normalizeQuestion(question).isBlank()) {
-            return Flux.just(NO_RESULT_RESPONSE);
+            return new RagStreamAnswer(Flux.just(NO_RESULT_RESPONSE), List.of());
         }
 
         try {
@@ -215,10 +244,15 @@ public class KnowledgeBaseQueryService {
             // 2. Query rewrite + 动态参数检索
             List<Message> effectiveHistory = sanitizeHistory(history);
             QueryContext queryContext = buildQueryContext(question, effectiveHistory);
-            List<Document> relevantDocs = retrieveRelevantDocs(queryContext, knowledgeBaseIds);
+            List<Document> relevantDocs = retrieveRelevantDocs(
+                queryContext,
+                knowledgeBaseIds,
+                RagSearchFilter.ofUser(currentUserIdOrNull())
+            );
+            List<RagSourceDTO> sources = buildSources(relevantDocs);
 
             if (!hasEffectiveHit(relevantDocs)) {
-                return Flux.just(NO_RESULT_RESPONSE);
+                return new RagStreamAnswer(Flux.just(NO_RESULT_RESPONSE), List.of());
             }
 
             // 3. 构建上下文
@@ -243,16 +277,17 @@ public class KnowledgeBaseQueryService {
                     .content();
 
             log.info("开始流式输出知识库回答(探测窗口): kbIds={}", knowledgeBaseIds);
-            return normalizeStreamOutput(responseFlux)
+            Flux<String> content = normalizeStreamOutput(responseFlux)
                 .doOnComplete(() -> log.info("流式输出完成: kbIds={}", knowledgeBaseIds))
                 .onErrorResume(e -> {
                     log.error("流式输出失败: kbIds={}, error={}", knowledgeBaseIds, e.getMessage(), e);
                     return Flux.just("【错误】知识库查询失败：AI服务暂时不可用，请稍后重试。");
                 });
+            return new RagStreamAnswer(content, sources);
 
         } catch (Exception e) {
             log.error("知识库流式问答失败: {}", e.getMessage(), e);
-            return Flux.just("【错误】知识库查询失败：" + e.getMessage());
+            return new RagStreamAnswer(Flux.just("【错误】知识库查询失败：" + e.getMessage()), List.of());
         }
     }
 
@@ -280,7 +315,11 @@ public class KnowledgeBaseQueryService {
     }
 
 //    向量检索
-    private List<Document> retrieveRelevantDocs(QueryContext queryContext, List<Long> knowledgeBaseIds) {
+    private List<Document> retrieveRelevantDocs(
+        QueryContext queryContext,
+        List<Long> knowledgeBaseIds,
+        RagSearchFilter filter
+    ) {
         for (String candidateQuery : queryContext.candidateQueries()) {
             if (candidateQuery.isBlank()) {
                 continue;
@@ -289,7 +328,8 @@ public class KnowledgeBaseQueryService {
                 candidateQuery,
                 knowledgeBaseIds,
                 queryContext.searchParams().topK(),
-                queryContext.searchParams().minScore()
+                queryContext.searchParams().minScore(),
+                filter
             );
             log.info("检索候选 query='{}'，命中 {} 条", candidateQuery, docs.size());
             if (hasEffectiveHit(docs)) {
@@ -297,6 +337,106 @@ public class KnowledgeBaseQueryService {
             }
         }
         return List.of();
+    }
+
+    private RagSearchFilter normalizeFilter(RagSearchFilter filter) {
+        if (filter == null) {
+            return RagSearchFilter.ofUser(currentUserIdOrNull());
+        }
+        Long userId = filter.userId() != null ? filter.userId() : currentUserIdOrNull();
+        return new RagSearchFilter(userId, filter.categories(), filter.keyword());
+    }
+
+    private Long currentUserIdOrNull() {
+        try {
+            return currentUserService.currentUserId();
+        } catch (Exception e) {
+            log.debug("未获取到当前用户，RAG 检索跳过 user_id 元数据过滤: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    private List<RagSourceDTO> buildSources(List<Document> docs) {
+        if (docs == null || docs.isEmpty()) {
+            return List.of();
+        }
+        Set<String> seen = new LinkedHashSet<>();
+        List<RagSourceDTO> sources = new ArrayList<>();
+        for (Document doc : docs) {
+            Long knowledgeBaseId = metadataLong(doc, "kb_id");
+            Integer chunkIndex = metadataInteger(doc, "chunk_index");
+            String snippet = toSnippet(doc.getText());
+            String key = knowledgeBaseId + ":" + chunkIndex + ":" + snippet;
+            if (!seen.add(key)) {
+                continue;
+            }
+            sources.add(new RagSourceDTO(
+                knowledgeBaseId,
+                metadataString(doc, "kb_name"),
+                metadataString(doc, "kb_category"),
+                metadataString(doc, "kb_original_filename"),
+                chunkIndex,
+                snippet,
+                metadataDouble(doc, "score")
+            ));
+            if (sources.size() >= 5) {
+                break;
+            }
+        }
+        return sources;
+    }
+
+    private String toSnippet(String text) {
+        if (text == null || text.isBlank()) {
+            return "";
+        }
+        String compact = text.replaceAll("\\s+", " ").trim();
+        int maxLength = 220;
+        return compact.length() <= maxLength ? compact : compact.substring(0, maxLength) + "...";
+    }
+
+    private String metadataString(Document doc, String key) {
+        Object value = doc.getMetadata().get(key);
+        return value == null ? null : value.toString();
+    }
+
+    private Long metadataLong(Document doc, String key) {
+        String value = metadataString(doc, key);
+        if (value == null || value.startsWith("pending:")) {
+            return null;
+        }
+        try {
+            return Long.parseLong(value);
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private Integer metadataInteger(Document doc, String key) {
+        String value = metadataString(doc, key);
+        if (value == null) {
+            return null;
+        }
+        try {
+            return Integer.parseInt(value);
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private Double metadataDouble(Document doc, String key) {
+        Object value = doc.getMetadata().get(key);
+        if (value instanceof Number number) {
+            return number.doubleValue();
+        }
+        if (value == null) {
+            return null;
+        }
+        try {
+            return Double.parseDouble(value.toString());
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     private SearchParams resolveSearchParams(String question) {
@@ -376,7 +516,8 @@ public class KnowledgeBaseQueryService {
     }
 
     private boolean isNoResultLike(String text) {
-        return text.contains("没有找到相关信息")
+        String normalized = text.toLowerCase(Locale.ROOT);
+        return normalized.contains("没有找到相关信息")
             || text.contains("未检索到相关信息")
             || text.contains("信息不足")
             || text.contains("超出知识库范围")
@@ -447,5 +588,8 @@ public class KnowledgeBaseQueryService {
     }
 
     private record QueryContext(String originalQuestion, List<String> candidateQueries, SearchParams searchParams) {
+    }
+
+    public record RagAnswerResult(String answer, List<RagSourceDTO> sources) {
     }
 }

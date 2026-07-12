@@ -34,6 +34,7 @@ public interface RagChatMapper {
      * 将消息实体转换为消息DTO
      */
     @Mapping(target = "type", source = "message", qualifiedByName = "getTypeString")
+    @Mapping(target = "sources", ignore = true)
     MessageDTO toMessageDTO(RagChatMessageEntity message);
     
     /**
@@ -105,4 +106,3 @@ public interface RagChatMapper {
         );
     }
 }
-

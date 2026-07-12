@@ -8,6 +8,8 @@ import com.yzh666.careerai.modules.knowledgebase.model.RagChatDTO.SessionDetailD
 import com.yzh666.careerai.modules.knowledgebase.model.RagChatDTO.SessionListItemDTO;
 import com.yzh666.careerai.modules.knowledgebase.model.RagChatDTO.UpdateKnowledgeBasesRequest;
 import com.yzh666.careerai.modules.knowledgebase.model.RagChatDTO.UpdateTitleRequest;
+import com.yzh666.careerai.modules.knowledgebase.model.RagSourceDTO;
+import com.yzh666.careerai.modules.knowledgebase.model.RagStreamAnswer;
 import com.yzh666.careerai.modules.knowledgebase.service.RagChatSessionService;
 import jakarta.validation.Valid;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -23,6 +25,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Flux;
+import tools.jackson.databind.ObjectMapper;
 
 import java.util.List;
 
@@ -36,6 +39,7 @@ import java.util.List;
 public class RagChatController {
 
     private final RagChatSessionService sessionService;
+    private final ObjectMapper objectMapper;
 
     /**
      * 创建新会话
@@ -126,15 +130,22 @@ public class RagChatController {
         // 2. 获取流式响应
         StringBuilder fullContent = new StringBuilder();
 
-        return sessionService.getStreamAnswer(sessionId, request.question())
+        RagStreamAnswer answer = sessionService.getStreamAnswerWithSources(sessionId, request.question());
+        Flux<ServerSentEvent<String>> contentEvents = answer.content()
             .doOnNext(fullContent::append)
             // 使用 ServerSentEvent 包装，转义换行符避免破坏 SSE 格式
             .map(chunk -> ServerSentEvent.<String>builder()
                 .data(chunk.replace("\n", "\\n").replace("\r", "\\r"))
-                .build())
+                .build());
+        Flux<ServerSentEvent<String>> sourceEvent = Flux.just(ServerSentEvent.<String>builder()
+            .event("rag_sources")
+            .data(toJson(answer.sources()))
+            .build());
+
+        return contentEvents.concatWith(sourceEvent)
             .doOnComplete(() -> {
                 // 3. 流式完成后更新消息内容
-                sessionService.completeStreamMessage(messageId, fullContent.toString());
+                sessionService.completeStreamMessage(messageId, fullContent.toString(), answer.sources());
                 log.info("RAG 聊天流式完成: sessionId={}, messageId={}", sessionId, messageId);
             })
             .doOnError(e -> {
@@ -145,5 +156,14 @@ public class RagChatController {
                 sessionService.completeStreamMessage(messageId, content);
                 log.error("RAG 聊天流式错误: sessionId={}", sessionId, e);
             });
+    }
+
+    private String toJson(List<RagSourceDTO> sources) {
+        try {
+            return objectMapper.writeValueAsString(sources == null ? List.of() : sources);
+        } catch (Exception e) {
+            log.warn("序列化 RAG 来源 SSE 失败: {}", e.getMessage());
+            return "[]";
+        }
     }
 }

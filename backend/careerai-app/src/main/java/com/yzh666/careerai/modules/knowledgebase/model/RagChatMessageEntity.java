@@ -46,6 +46,12 @@ public class RagChatMessageEntity {
     private String content;
 
     /**
+     * RAG 引用来源 JSON，仅助手消息使用
+     */
+    @Column(columnDefinition = "TEXT")
+    private String sourcesJson;
+
+    /**
      * 消息顺序（用于排序）
      */
     @Column(nullable = false)

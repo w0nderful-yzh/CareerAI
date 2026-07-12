@@ -90,6 +90,7 @@ public class RagChatDTO {
         Long id,
         String type,  // "user" | "assistant"
         String content,
+        List<RagSourceDTO> sources,
         LocalDateTime createdAt
     ) {}
 }

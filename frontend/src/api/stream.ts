@@ -6,6 +6,7 @@ interface StreamSseOptions {
   url: string;
   init: RequestInit;
   onMessage: (chunk: string) => void;
+  onEvent?: (eventName: string, data: string) => void;
   onComplete: () => void;
   onError: (error: Error) => void;
   parseMode?: SseParseMode;
@@ -149,10 +150,14 @@ function readDataLine(line: string, trimDataPrefixSpace: boolean): string | null
 
 function emitContent(content: string, options: StreamSseOptions): void {
   assertNoBusinessError(content);
-  const output = options.unescapeEscapedNewlines
+  const output = normalizeOutput(content, options);
+  options.onMessage(output);
+}
+
+function normalizeOutput(content: string, options: StreamSseOptions): string {
+  return options.unescapeEscapedNewlines
     ? content.replace(/\\n/g, '\n').replace(/\\r/g, '\r')
     : content;
-  options.onMessage(output);
 }
 
 function processLine(line: string, options: StreamSseOptions): void {
@@ -207,6 +212,12 @@ function processEventBlock(block: string, options: StreamSseOptions): void {
     const parsed = parseJsonObject(content);
     const businessError = parsed ? getBusinessEventError(parsed) : null;
     throw businessError ?? new Error(content.trim() || '请求失败');
+  }
+
+  if (eventName && options.onEvent) {
+    assertNoBusinessError(content);
+    options.onEvent(eventName, normalizeOutput(content, options));
+    return;
   }
 
   emitContent(content, options);

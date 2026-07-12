@@ -49,12 +49,25 @@ export interface UploadKnowledgeBaseResponse {
 export interface QueryRequest {
   knowledgeBaseIds: number[];  // 支持多个知识库
   question: string;
+  categories?: string[];
+  keyword?: string;
 }
 
 export interface QueryResponse {
   answer: string;
   knowledgeBaseId: number;
   knowledgeBaseName: string;
+  sources: RagSource[];
+}
+
+export interface RagSource {
+  knowledgeBaseId: number | null;
+  knowledgeBaseName: string | null;
+  category: string | null;
+  originalFilename: string | null;
+  chunkIndex: number | null;
+  snippet: string;
+  score: number | null;
 }
 
 export const knowledgeBaseApi = {

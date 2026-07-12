@@ -13,13 +13,20 @@ public record QueryRequest(
     List<Long> knowledgeBaseIds,  // 支持多个知识库
     
     @NotBlank(message = "问题不能为空")
-    String question
+    String question,
+
+    List<String> categories,
+
+    String keyword
 ) {
     /**
      * 兼容单知识库查询（向后兼容）
      */
     public QueryRequest(Long knowledgeBaseId, String question) {
-        this(List.of(knowledgeBaseId), question);
+        this(List.of(knowledgeBaseId), question, List.of(), null);
+    }
+
+    public QueryRequest(List<Long> knowledgeBaseIds, String question) {
+        this(knowledgeBaseIds, question, List.of(), null);
     }
 }
-

@@ -4,11 +4,11 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {Virtuoso, type VirtuosoHandle} from 'react-virtuoso';
 import {knowledgeBaseApi, type KnowledgeBaseItem, type SortOption} from '../api/knowledgebase';
-import {ragChatApi, type RagChatSessionListItem} from '../api/ragChat';
+import {ragChatApi, type RagChatSessionListItem, type RagSource} from '../api/ragChat';
 import {formatDateOnly} from '../utils/date';
 import DeleteConfirmDialog from '../components/DeleteConfirmDialog';
 import CodeBlock from '../components/CodeBlock';
-import {ChevronLeft, ChevronRight, Edit, MessageSquare, Pin, Plus, Trash2,} from 'lucide-react';
+import {ChevronLeft, ChevronRight, Edit, FileText, MessageSquare, Pin, Plus, Trash2,} from 'lucide-react';
 
 interface KnowledgeBaseQueryPageProps {
   onBack: () => void;
@@ -19,6 +19,7 @@ interface Message {
   id?: number;
   type: 'user' | 'assistant';
   content: string;
+  sources?: RagSource[];
   timestamp: Date;
 }
 
@@ -188,6 +189,7 @@ export default function KnowledgeBaseQueryPage({ onBack, onUpload }: KnowledgeBa
         id: m.id,
         type: m.type,
         content: m.content,
+        sources: m.sources ?? [],
         timestamp: new Date(m.createdAt),
       })));
     } catch (err) {
@@ -304,6 +306,20 @@ export default function KnowledgeBaseQueryPage({ onBack, onUpload }: KnowledgeBa
       });
     };
 
+    const updateAssistantSources = (sources: RagSource[]) => {
+      setMessages(prev => {
+        const newMessages = [...prev];
+        const lastIndex = newMessages.length - 1;
+        if (lastIndex >= 0 && newMessages[lastIndex].type === 'assistant') {
+          newMessages[lastIndex] = {
+            ...newMessages[lastIndex],
+            sources,
+          };
+        }
+        return newMessages;
+      });
+    };
+
     try {
       await ragChatApi.sendMessageStream(
         sessionId,
@@ -327,7 +343,8 @@ export default function KnowledgeBaseQueryPage({ onBack, onUpload }: KnowledgeBa
           console.error('流式查询失败:', error);
           updateAssistantMessage(fullContent || error.message || '回答失败，请重试');
           setLoading(false);
-        }
+        },
+        updateAssistantSources
       );
     } catch (err) {
       console.error('发起流式查询失败:', err);
@@ -355,6 +372,21 @@ export default function KnowledgeBaseQueryPage({ onBack, onUpload }: KnowledgeBa
     if (hours < 24) return `${hours} 小时前`;
     if (days < 7) return `${days} 天前`;
     return formatDateOnly(dateStr);
+  };
+
+  const sourceTitle = (source: RagSource): string => {
+    return source.knowledgeBaseName || source.originalFilename || '命中文档片段';
+  };
+
+  const sourceMeta = (source: RagSource): string => {
+    const parts = [
+      source.category,
+      source.originalFilename && source.originalFilename !== source.knowledgeBaseName
+        ? source.originalFilename
+        : null,
+      source.chunkIndex ? `片段 ${source.chunkIndex}` : null,
+    ].filter(Boolean);
+    return parts.join(' · ');
   };
 
   return (
@@ -569,6 +601,45 @@ export default function KnowledgeBaseQueryPage({ onBack, onUpload }: KnowledgeBa
                                   >
                                     {formatMarkdown(msg.content)}
                                   </ReactMarkdown>
+                                  {msg.sources && msg.sources.length > 0 && (
+                                    <div className="not-prose mt-4 rounded-2xl border border-sky-100 dark:border-sky-900/50 bg-sky-50/60 dark:bg-sky-950/20 p-3">
+                                      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-sky-700 dark:text-sky-300">
+                                        <FileText className="h-3.5 w-3.5" />
+                                        RAG 引用来源
+                                      </div>
+                                      <div className="mt-3 space-y-2">
+                                        {msg.sources.map((source, sourceIndex) => (
+                                          <div
+                                            key={`${source.knowledgeBaseId ?? 'kb'}-${source.chunkIndex ?? sourceIndex}-${sourceIndex}`}
+                                            className="rounded-xl border border-white/80 dark:border-slate-700 bg-white/85 dark:bg-slate-800/80 p-3 shadow-sm"
+                                          >
+                                            <div className="flex items-start justify-between gap-3">
+                                              <div className="min-w-0">
+                                                <p className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">
+                                                  {sourceIndex + 1}. {sourceTitle(source)}
+                                                </p>
+                                                {sourceMeta(source) && (
+                                                  <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                                                    {sourceMeta(source)}
+                                                  </p>
+                                                )}
+                                              </div>
+                                              {typeof source.score === 'number' && (
+                                                <span className="shrink-0 rounded-full bg-slate-100 dark:bg-slate-700 px-2 py-0.5 text-[11px] text-slate-500 dark:text-slate-300">
+                                                  {source.score.toFixed(2)}
+                                                </span>
+                                              )}
+                                            </div>
+                                            {source.snippet && (
+                                              <p className="mt-2 line-clamp-3 text-xs leading-5 text-slate-600 dark:text-slate-300">
+                                                {source.snippet}
+                                              </p>
+                                            )}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
                                   {loading && index === messages.length - 1 && (
                                     <span className="inline-block w-0.5 h-5 bg-primary-500 ml-1 animate-pulse" />
                                   )}
