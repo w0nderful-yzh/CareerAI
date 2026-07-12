@@ -63,7 +63,18 @@ export interface InterviewReport {
   overallFeedback: string;
   strengths: string[];
   improvements: string[];
+  jobEvaluation?: JobEvaluation | null;
   referenceAnswers: ReferenceAnswer[];
+}
+
+export interface JobEvaluation {
+  targetJobTitle: string;
+  conclusion: string;
+  jdCoverageScore: number;
+  jdCoverage: string[];
+  exposedGaps: string[];
+  resumeRewriteSuggestions: string[];
+  nextActions: string[];
 }
 
 export interface CategoryScore {

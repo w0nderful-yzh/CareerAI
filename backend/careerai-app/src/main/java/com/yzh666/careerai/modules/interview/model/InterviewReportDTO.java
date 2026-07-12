@@ -14,6 +14,7 @@ public record InterviewReportDTO(
     String overallFeedback,                    // 总体评价
     List<String> strengths,                    // 优势
     List<String> improvements,                 // 改进建议
+    JobEvaluation jobEvaluation,               // 岗位化评价
     List<ReferenceAnswer> referenceAnswers     // 参考答案
 ) {
     /**
@@ -45,5 +46,18 @@ public record InterviewReportDTO(
         String question,
         String referenceAnswer,
         List<String> keyPoints
+    ) {}
+
+    /**
+     * 岗位化评价
+     */
+    public record JobEvaluation(
+        String targetJobTitle,
+        String conclusion,
+        int jdCoverageScore,
+        List<String> jdCoverage,
+        List<String> exposedGaps,
+        List<String> resumeRewriteSuggestions,
+        List<String> nextActions
     ) {}
 }

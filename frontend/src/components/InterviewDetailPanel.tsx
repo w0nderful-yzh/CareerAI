@@ -55,6 +55,11 @@ export default function InterviewDetailPanel({ interview }: InterviewDetailPanel
         strokeDashoffset={strokeDashoffset}
       />
 
+      {/* 岗位化评价 */}
+      {interview.jobEvaluation && (
+        <JobEvaluationSection evaluation={interview.jobEvaluation} />
+      )}
+
       {/* 表现优势 */}
       {interview.strengths && interview.strengths.length > 0 && (
         <StrengthsSection strengths={interview.strengths} />
@@ -72,6 +77,73 @@ export default function InterviewDetailPanel({ interview }: InterviewDetailPanel
         toggleQuestion={toggleQuestion}
       />
     </motion.div>
+  );
+}
+
+function JobEvaluationSection({
+  evaluation,
+}: {
+  evaluation: NonNullable<InterviewDetail['jobEvaluation']>;
+}) {
+  return (
+    <motion.div
+      className="overflow-hidden rounded-2xl border border-indigo-100 bg-white shadow-sm dark:border-indigo-900/40 dark:bg-slate-800"
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.08 }}
+    >
+      <div className="bg-gradient-to-r from-slate-950 via-indigo-950 to-slate-900 px-6 py-5 text-white">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-indigo-200">Job Fit Review</p>
+            <h4 className="mt-1 text-xl font-bold">{evaluation.targetJobTitle || '目标岗位复盘'}</h4>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-white/80">{evaluation.conclusion}</p>
+          </div>
+          <div className="flex h-20 w-20 shrink-0 flex-col items-center justify-center rounded-2xl bg-white/10 ring-1 ring-white/20">
+            <span className="text-3xl font-black">{evaluation.jdCoverageScore}</span>
+            <span className="text-xs text-white/60">JD覆盖</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-4 p-6 md:grid-cols-2">
+        <JobEvaluationList title="已覆盖能力" items={evaluation.jdCoverage} tone="good" />
+        <JobEvaluationList title="暴露短板" items={evaluation.exposedGaps} tone="gap" />
+        <JobEvaluationList title="简历可沉淀表达" items={evaluation.resumeRewriteSuggestions} tone="resume" />
+        <JobEvaluationList title="下一步行动" items={evaluation.nextActions} tone="action" />
+      </div>
+    </motion.div>
+  );
+}
+
+function JobEvaluationList({
+  title,
+  items,
+  tone,
+}: {
+  title: string;
+  items: string[];
+  tone: 'good' | 'gap' | 'resume' | 'action';
+}) {
+  const toneClassName = {
+    good: 'bg-emerald-500',
+    gap: 'bg-rose-500',
+    resume: 'bg-indigo-500',
+    action: 'bg-amber-500',
+  }[tone];
+
+  return (
+    <div className="rounded-2xl bg-slate-50 p-4 dark:bg-slate-900/60">
+      <h5 className="mb-3 text-sm font-bold text-slate-800 dark:text-white">{title}</h5>
+      <div className="space-y-2.5">
+        {(items?.length ? items : ['暂无数据']).map((item, index) => (
+          <div key={`${title}-${index}`} className="flex items-start gap-2.5 text-sm leading-6 text-slate-600 dark:text-slate-300">
+            <span className={`mt-2 h-2 w-2 shrink-0 rounded-full ${toneClassName}`} />
+            <span>{item}</span>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 

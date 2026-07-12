@@ -73,6 +73,7 @@ public interface InterviewMapper {
     @Mapping(target = "questions", source = "questions")
     @Mapping(target = "strengths", source = "strengths")
     @Mapping(target = "improvements", source = "improvements")
+    @Mapping(target = "jobEvaluation", source = "jobEvaluation")
     @Mapping(target = "referenceAnswers", source = "referenceAnswers")
     @Mapping(target = "answers", source = "answers")
     InterviewDetailDTO toDetailDTO(
@@ -80,6 +81,7 @@ public interface InterviewMapper {
         List<Object> questions,
         List<String> strengths,
         List<String> improvements,
+        InterviewReportDTO.JobEvaluation jobEvaluation,
         List<Object> referenceAnswers,
         List<InterviewDetailDTO.AnswerDetailDTO> answers
     );

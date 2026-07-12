@@ -84,6 +84,10 @@ public class InterviewSessionEntity {
     // 改进建议 (JSON)
     @Column(columnDefinition = "TEXT")
     private String improvementsJson;
+
+    // 岗位化评价 (JSON)
+    @Column(columnDefinition = "TEXT")
+    private String jobEvaluationJson;
     
     // 参考答案 (JSON)
     @Column(columnDefinition = "TEXT")
@@ -224,6 +228,14 @@ public class InterviewSessionEntity {
     
     public void setImprovementsJson(String improvementsJson) {
         this.improvementsJson = improvementsJson;
+    }
+
+    public String getJobEvaluationJson() {
+        return jobEvaluationJson;
+    }
+
+    public void setJobEvaluationJson(String jobEvaluationJson) {
+        this.jobEvaluationJson = jobEvaluationJson;
     }
     
     public String getReferenceAnswersJson() {

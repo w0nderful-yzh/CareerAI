@@ -22,6 +22,7 @@ public record InterviewDetailDTO(
     List<Object> questions,
     List<String> strengths,
     List<String> improvements,
+    InterviewReportDTO.JobEvaluation jobEvaluation,
     List<Object> referenceAnswers,
     List<AnswerDetailDTO> answers
 ) {

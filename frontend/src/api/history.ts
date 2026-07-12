@@ -56,6 +56,16 @@ export interface InterviewItem {
   referenceAnswers?: unknown[];
 }
 
+export interface JobEvaluation {
+  targetJobTitle: string;
+  conclusion: string;
+  jdCoverageScore: number;
+  jdCoverage: string[];
+  exposedGaps: string[];
+  resumeRewriteSuggestions: string[];
+  nextActions: string[];
+}
+
 export interface AnswerItem {
   questionIndex: number;
   question: string;
@@ -86,6 +96,7 @@ export interface ResumeDetail {
 export interface InterviewDetail extends InterviewItem {
   evaluateStatus?: EvaluateStatus;
   evaluateError?: string;
+  jobEvaluation?: JobEvaluation | null;
   answers: AnswerItem[];
 }
 

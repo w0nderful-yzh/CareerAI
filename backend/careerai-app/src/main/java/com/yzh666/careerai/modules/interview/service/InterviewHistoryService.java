@@ -10,6 +10,7 @@ import com.yzh666.careerai.infrastructure.mapper.InterviewMapper;
 import com.yzh666.careerai.modules.interview.model.InterviewAnswerEntity;
 import com.yzh666.careerai.modules.interview.model.InterviewDetailDTO;
 import com.yzh666.careerai.modules.interview.model.InterviewQuestionDTO;
+import com.yzh666.careerai.modules.interview.model.InterviewReportDTO;
 import com.yzh666.careerai.modules.interview.model.InterviewSessionEntity;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -47,6 +48,11 @@ public class InterviewHistoryService {
         List<Object> questions = parseJson(session.getQuestionsJson(), new TypeReference<>() {});
         List<String> strengths = parseJson(session.getStrengthsJson(), new TypeReference<>() {});
         List<String> improvements = parseJson(session.getImprovementsJson(), new TypeReference<>() {});
+        InterviewReportDTO.JobEvaluation jobEvaluation = parseJson(
+            session.getJobEvaluationJson(),
+            new TypeReference<>() {
+            }
+        );
         List<Object> referenceAnswers = parseJson(session.getReferenceAnswersJson(), new TypeReference<>() {});
 
         // 解析所有题目（用于构建完整的答案列表）
@@ -68,6 +74,7 @@ public class InterviewHistoryService {
             questions,
             strengths,
             improvements,
+            jobEvaluation,
             referenceAnswers,
             answerList
         );
@@ -159,4 +166,3 @@ public class InterviewHistoryService {
         }
     }
 }
-

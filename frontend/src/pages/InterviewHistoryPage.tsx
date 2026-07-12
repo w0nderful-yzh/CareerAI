@@ -11,6 +11,7 @@ import {getTemplateName} from '../utils/voiceInterview';
 import DeleteConfirmDialog from '../components/DeleteConfirmDialog';
 import {
   AlertCircle,
+  BriefcaseBusiness,
   CheckCircle,
   ChevronRight,
   Clock,
@@ -42,6 +43,8 @@ interface UnifiedInterviewItem {
   actualDuration?: number;
   createdAt: string;
   resumeId?: number;
+  jobId?: number;
+  matchReportId?: number;
   voiceSessionId?: number;
 }
 
@@ -132,7 +135,13 @@ function StatCard({
   );
 }
 
-function TypeBadge({ type }: { type: 'text' | 'voice' }) {
+function TypeBadge({
+  type,
+  isJobInterview,
+}: {
+  type: 'text' | 'voice';
+  isJobInterview?: boolean;
+}) {
   if (type === 'voice') {
     return (
       <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 rounded-full text-xs font-medium">
@@ -142,10 +151,18 @@ function TypeBadge({ type }: { type: 'text' | 'voice' }) {
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded-full text-xs font-medium">
-      <FileText className="w-3 h-3" />
-      文字
-    </span>
+    <div className="flex flex-col items-start gap-1.5">
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded-full text-xs font-medium">
+        <FileText className="w-3 h-3" />
+        文字
+      </span>
+      {isJobInterview && (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 rounded-full text-xs font-medium">
+          <BriefcaseBusiness className="w-3 h-3" />
+          岗位
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -247,6 +264,8 @@ export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview,
         totalQuestions: session.totalQuestions,
         createdAt: session.createdAt,
         resumeId: session.resumeId ?? undefined,
+        jobId: session.jobId ?? undefined,
+        matchReportId: session.matchReportId ?? undefined,
       }));
     } catch {
       return [];
@@ -482,7 +501,7 @@ export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview,
                     className="border-b border-slate-50 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50 cursor-pointer transition-colors group"
                   >
                     <td className="px-6 py-4">
-                      <TypeBadge type={item.type} />
+                      <TypeBadge type={item.type} isJobInterview={item.jobId != null} />
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
@@ -526,9 +545,17 @@ export default function InterviewHistoryPage({ onBack: _onBack, onViewInterview,
                     </td>
                     <td className="px-6 py-4">
                       {item.type === 'text' && item.totalQuestions != null ? (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-sm">
-                          {item.totalQuestions} 题
-                        </span>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-sm">
+                            {item.totalQuestions} 题
+                          </span>
+                          {item.jobId != null && (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-indigo-50 text-indigo-700 ring-1 ring-indigo-100 dark:bg-indigo-950/30 dark:text-indigo-300 dark:ring-indigo-900/50 rounded-lg text-sm">
+                              <BriefcaseBusiness className="w-3.5 h-3.5" />
+                              岗位复盘
+                            </span>
+                          )}
+                        </div>
                       ) : item.type === 'voice' ? (
                         <span className="text-sm text-slate-500 dark:text-slate-400">
                           {formatDuration(item.actualDuration)}
