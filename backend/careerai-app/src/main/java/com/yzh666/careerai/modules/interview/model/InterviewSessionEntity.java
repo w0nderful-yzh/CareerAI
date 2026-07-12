@@ -16,6 +16,7 @@ import java.util.List;
     @Index(name = "idx_interview_session_user_created", columnList = "userId,createdAt"),
     @Index(name = "idx_interview_session_resume_created", columnList = "resume_id,created_at"),
     @Index(name = "idx_interview_session_resume_status_created", columnList = "resume_id,status,created_at"),
+    @Index(name = "idx_interview_session_user_job_created", columnList = "userId,jobId,createdAt"),
     @Index(name = "idx_interview_session_skill_created", columnList = "skillId,createdAt")
 })
 public class InterviewSessionEntity {
@@ -38,6 +39,12 @@ public class InterviewSessionEntity {
     // 难度级别 (junior / mid / senior)
     @Column(length = 16)
     private String difficulty = "mid";
+
+    // 岗位ID（岗位驱动面试，可选）
+    private Long jobId;
+
+    // 简历-岗位匹配报告ID（岗位驱动面试，可选）
+    private Long matchReportId;
 
     // 简历ID（直接映射FK列，避免LAZY加载触发额外查询）
     @Column(name = "resume_id", insertable = false, updatable = false)
@@ -289,6 +296,22 @@ public class InterviewSessionEntity {
 
     public void setDifficulty(String difficulty) {
         this.difficulty = difficulty;
+    }
+
+    public Long getJobId() {
+        return jobId;
+    }
+
+    public void setJobId(Long jobId) {
+        this.jobId = jobId;
+    }
+
+    public Long getMatchReportId() {
+        return matchReportId;
+    }
+
+    public void setMatchReportId(Long matchReportId) {
+        this.matchReportId = matchReportId;
     }
 
     public void addAnswer(InterviewAnswerEntity answer) {

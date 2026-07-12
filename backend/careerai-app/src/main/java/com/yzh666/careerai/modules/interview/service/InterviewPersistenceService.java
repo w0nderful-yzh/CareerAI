@@ -51,7 +51,9 @@ public class InterviewPersistenceService {
                                               List<InterviewQuestionDTO> questions,
                                               String llmProvider,
                                               String skillId,
-                                              String difficulty) {
+                                              String difficulty,
+                                              Long jobId,
+                                              Long matchReportId) {
         try {
             Long userId = currentUserService.currentUserId();
             InterviewSessionEntity session = new InterviewSessionEntity();
@@ -64,6 +66,8 @@ public class InterviewPersistenceService {
             session.setLlmProvider(llmProvider != null ? llmProvider : "default");
             session.setSkillId(skillId != null ? skillId : InterviewDefaults.SKILL_ID);
             session.setDifficulty(difficulty != null ? difficulty : InterviewDefaults.DIFFICULTY);
+            session.setJobId(jobId);
+            session.setMatchReportId(matchReportId);
 
             // 简历可选：有 resumeId 则关联简历
             if (resumeId != null) {
@@ -73,7 +77,15 @@ public class InterviewPersistenceService {
             }
 
             InterviewSessionEntity saved = sessionRepository.save(session);
-            log.info("面试会话已保存: sessionId={}, userId={}, skillId={}, resumeId={}", sessionId, userId, skillId, resumeId);
+            log.info(
+                "面试会话已保存: sessionId={}, userId={}, skillId={}, resumeId={}, jobId={}, matchReportId={}",
+                sessionId,
+                userId,
+                skillId,
+                resumeId,
+                jobId,
+                matchReportId
+            );
 
             return saved;
         } catch (JacksonException e) {
@@ -267,6 +279,16 @@ public class InterviewPersistenceService {
      */
     public List<InterviewSessionEntity> findAll() {
         return sessionRepository.findByUserIdOrderByCreatedAtDesc(currentUserService.currentUserId());
+    }
+
+    /**
+     * 获取某个岗位关联的所有面试记录
+     */
+    public List<InterviewSessionEntity> findByJobId(Long jobId) {
+        return sessionRepository.findByUserIdAndJobIdOrderByCreatedAtDesc(
+            currentUserService.currentUserId(),
+            jobId
+        );
     }
     
     /**

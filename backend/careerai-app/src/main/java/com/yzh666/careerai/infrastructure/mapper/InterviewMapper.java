@@ -114,6 +114,8 @@ public interface InterviewMapper {
         return new InterviewHistoryItemDTO(
             session.getId(),
             session.getSessionId(),
+            session.getJobId(),
+            session.getMatchReportId(),
             session.getTotalQuestions(),
             session.getStatus().toString(),
             session.getEvaluateStatus() != null ? session.getEvaluateStatus().name() : null,

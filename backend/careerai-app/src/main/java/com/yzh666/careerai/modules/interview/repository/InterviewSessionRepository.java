@@ -79,6 +79,8 @@ public interface InterviewSessionRepository extends JpaRepository<InterviewSessi
 
     List<InterviewSessionEntity> findByUserIdOrderByCreatedAtDesc(Long userId);
 
+    List<InterviewSessionEntity> findByUserIdAndJobIdOrderByCreatedAtDesc(Long userId, Long jobId);
+
     /**
      * 根据 skillId 查找最近的面试记录（用于通用模式历史题去重）
      */

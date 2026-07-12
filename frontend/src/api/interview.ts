@@ -13,6 +13,8 @@ export interface TextSessionMeta {
   skillId: string;
   difficulty: string;
   resumeId: number | null;
+  jobId: number | null;
+  matchReportId: number | null;
   totalQuestions: number;
   status: string;
   evaluateStatus: string | null;
@@ -26,8 +28,10 @@ export const interviewApi = {
   /**
    * 列出所有文字面试会话
    */
-  async listSessions(): Promise<TextSessionMeta[]> {
-    return request.get<TextSessionMeta[]>('/api/interview/sessions');
+  async listSessions(jobId?: number): Promise<TextSessionMeta[]> {
+    return request.get<TextSessionMeta[]>('/api/interview/sessions', {
+      params: jobId ? { jobId } : undefined,
+    });
   },
 
   /**

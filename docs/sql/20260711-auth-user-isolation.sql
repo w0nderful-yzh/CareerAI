@@ -33,6 +33,9 @@ UPDATE interview_sessions
 SET user_id = (SELECT id FROM users WHERE username = 'local-dev')
 WHERE user_id IS NULL;
 CREATE INDEX IF NOT EXISTS idx_interview_session_user_created ON interview_sessions (user_id, created_at);
+ALTER TABLE interview_sessions ADD COLUMN IF NOT EXISTS job_id bigint;
+ALTER TABLE interview_sessions ADD COLUMN IF NOT EXISTS match_report_id bigint;
+CREATE INDEX IF NOT EXISTS idx_interview_session_user_job_created ON interview_sessions (user_id, job_id, created_at);
 
 ALTER TABLE knowledge_bases ADD COLUMN IF NOT EXISTS user_id bigint;
 UPDATE knowledge_bases

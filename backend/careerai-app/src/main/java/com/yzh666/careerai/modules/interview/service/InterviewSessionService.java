@@ -107,7 +107,13 @@ public class InterviewSessionService {
         // 保存到数据库
         try {
             persistenceService.saveSession(sessionId, request.resumeId(),
-                questions.size(), questions, request.llmProvider(), skillId, difficulty);
+                questions.size(),
+                questions,
+                request.llmProvider(),
+                skillId,
+                difficulty,
+                request.jobId(),
+                request.matchReportId());
         } catch (Exception e) {
             log.warn("保存面试会话到数据库失败: {}", e.getMessage());
         }

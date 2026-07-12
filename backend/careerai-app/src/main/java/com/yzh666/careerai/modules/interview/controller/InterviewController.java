@@ -24,6 +24,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.net.URLEncoder;
@@ -49,8 +50,10 @@ public class InterviewController {
      * 列出所有面试会话（用于面试记录页）
      */
     @GetMapping("/api/interview/sessions")
-    public Result<List<SessionListItemDTO>> listSessions() {
-        List<SessionListItemDTO> items = persistenceService.findAll().stream()
+    public Result<List<SessionListItemDTO>> listSessions(@RequestParam(required = false) Long jobId) {
+        List<SessionListItemDTO> items = (jobId == null
+            ? persistenceService.findAll()
+            : persistenceService.findByJobId(jobId)).stream()
             .map(SessionListItemDTO::from)
             .toList();
         return Result.success(items);

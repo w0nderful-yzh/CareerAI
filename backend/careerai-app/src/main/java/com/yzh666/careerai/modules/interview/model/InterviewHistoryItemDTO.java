@@ -10,6 +10,8 @@ import java.time.LocalDateTime;
 public record InterviewHistoryItemDTO(
     Long id,
     String sessionId,
+    Long jobId,
+    Long matchReportId,
     Integer totalQuestions,
     String status,
     String evaluateStatus,
