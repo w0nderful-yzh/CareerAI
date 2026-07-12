@@ -12,4 +12,12 @@ public interface JobMatchReportRepository extends JpaRepository<JobMatchReportEn
     List<JobMatchReportEntity> findByUserIdAndJobIdOrderByCreatedAtDesc(Long userId, Long jobId);
 
     Optional<JobMatchReportEntity> findByIdAndUserId(Long id, Long userId);
+
+    Optional<JobMatchReportEntity> findFirstByUserIdAndJobIdOrderByCreatedAtDesc(Long userId, Long jobId);
+
+    Optional<JobMatchReportEntity> findFirstByUserIdAndJobIdAndResumeIdOrderByCreatedAtDesc(
+        Long userId,
+        Long jobId,
+        Long resumeId
+    );
 }

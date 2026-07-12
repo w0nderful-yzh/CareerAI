@@ -109,6 +109,8 @@ interface InterviewEntryState {
     llmProvider?: string;
     customCategories?: CategoryDTO[];
     jdText?: string;
+    jobId?: number;
+    matchReportId?: number;
   };
 }
 

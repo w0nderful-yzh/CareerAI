@@ -27,6 +27,8 @@ interface InterviewProps {
     difficulty?: Difficulty;
     customCategories?: CategoryDTO[];
     jdText?: string;
+    jobId?: number;
+    matchReportId?: number;
   };
   onBack: () => void;
   onInterviewComplete: () => void;
@@ -56,6 +58,8 @@ export default function Interview({
   const difficulty = initialConfig?.difficulty ?? 'mid';
   const customCategories = initialConfig?.customCategories;
   const jdText = initialConfig?.jdText;
+  const jobId = initialConfig?.jobId;
+  const matchReportId = initialConfig?.matchReportId;
 
   // 自动开始面试（恢复已有会话 或 创建新会话）
   useEffect(() => {
@@ -85,6 +89,8 @@ export default function Interview({
         difficulty,
         customCategories: skillId === CUSTOM_SKILL_ID ? customCategories : undefined,
         jdText: skillId === CUSTOM_SKILL_ID ? jdText : undefined,
+        jobId,
+        matchReportId,
       });
 
       initSession(newSession);

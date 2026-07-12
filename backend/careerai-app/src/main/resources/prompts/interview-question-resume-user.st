@@ -17,6 +17,9 @@
 ## 已考知识点（避免重复）
 {historicalSection}
 
+## 简历-岗位匹配上下文
+{jobMatchSection}
+
 ## 输出要求
 - questions 数组必须包含恰好 {questionCount} 个元素，不多不少
 - 每个主问题必须包含 topicSummary 字段：10 字以内的知识点摘要（用于历史去重），格式示例：

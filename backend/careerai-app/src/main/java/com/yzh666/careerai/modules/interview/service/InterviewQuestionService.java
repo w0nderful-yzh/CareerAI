@@ -125,7 +125,8 @@ public class InterviewQuestionService {
             int questionCount,
             List<HistoricalQuestion> historicalQuestions,
             List<CategoryDTO> customCategories,
-            String jdText) {
+            String jdText,
+            String jobMatchContext) {
 
         SkillDTO skill = resolveSkill(skillId, customCategories, jdText);
         String difficultyDesc = resolveDifficulty(difficulty);
@@ -136,7 +137,7 @@ public class InterviewQuestionService {
         String historicalSection = buildHistoricalSection(historicalQuestions);
         if (!hasResume) {
             return generateDirectionOnly(questionChatClient, skill, difficultyDesc, questionCount,
-                historicalSection);
+                historicalSection, jobMatchContext);
         }
 
         int resumeCount = Math.max(1, (int) Math.round(questionCount * RESUME_QUESTION_RATIO));
@@ -147,12 +148,12 @@ public class InterviewQuestionService {
 
         CompletableFuture<List<InterviewQuestionDTO>> resumeFuture = CompletableFuture.supplyAsync(
             () -> generateResumeQuestions(questionChatClient, resumeText, resumeCount, skill,
-                difficultyDesc, historicalSection),
+                difficultyDesc, historicalSection, jobMatchContext),
             questionExecutor);
 
         CompletableFuture<List<InterviewQuestionDTO>> directionFuture = CompletableFuture.supplyAsync(
             () -> generateDirectionOnly(questionChatClient, skill, difficultyDesc, directionCount,
-                historicalSection),
+                historicalSection, jobMatchContext),
             questionExecutor);
 
         List<InterviewQuestionDTO> resumeQuestions;
@@ -163,7 +164,7 @@ public class InterviewQuestionService {
             log.error("简历题生成失败，降级为全方向题", e.getCause());
             directionFuture.cancel(true);
             return generateDirectionOnly(questionChatClient, skill, difficultyDesc, questionCount,
-                historicalSection);
+                historicalSection, jobMatchContext);
         }
 
         try {
@@ -189,7 +190,7 @@ public class InterviewQuestionService {
 
     private List<InterviewQuestionDTO> generateResumeQuestions(
             ChatClient questionClient, String resumeText, int questionCount,
-            SkillDTO skill, String difficultyDesc, String historicalSection) {
+            SkillDTO skill, String difficultyDesc, String historicalSection, String jobMatchContext) {
         try {
             Map<String, Object> variables = new HashMap<>();
             variables.put("questionCount", questionCount);
@@ -199,6 +200,7 @@ public class InterviewQuestionService {
             variables.put("difficultyDescription", difficultyDesc);
             variables.put("resumeText", resumeText);
             variables.put("historicalSection", historicalSection);
+            variables.put("jobMatchSection", buildJobMatchSection(jobMatchContext));
 
             String systemPrompt = resumeSystemPromptTemplate.render()
                 + buildSkillPersonaSection(skill)
@@ -225,7 +227,7 @@ public class InterviewQuestionService {
 
     private List<InterviewQuestionDTO> generateDirectionOnly(
             ChatClient questionClient, SkillDTO skill, String difficultyDesc,
-            int questionCount, String historicalSection) {
+            int questionCount, String historicalSection, String jobMatchContext) {
         Map<String, Integer> allocation = skillService.calculateAllocation(skill.categories(), questionCount);
         String allocationTable = skillService.buildAllocationDescription(allocation, skill.categories());
 
@@ -243,6 +245,7 @@ public class InterviewQuestionService {
             variables.put("historicalSection", historicalSection);
             variables.put("referenceSection", skillService.buildReferenceSection(skill, allocation));
             variables.put("jdSection", buildJdSection(skill.sourceJd()));
+            variables.put("jobMatchSection", buildJobMatchSection(jobMatchContext));
 
             String systemPrompt = skillSystemPromptTemplate.render()
                 + buildSkillPersonaSection(skill)
@@ -433,6 +436,16 @@ public class InterviewQuestionService {
         return PromptSecurityConstants.DATA_BOUNDARY_INSTRUCTION + "\n" +
             "## 职位描述（JD）\n根据以下 JD 关键要求出题，确保题目与岗位实际需求相关：\n" +
             promptSanitizer.wrapWithDelimiters("jd", promptSanitizer.sanitize(sourceJd));
+    }
+
+    private String buildJobMatchSection(String jobMatchContext) {
+        if (jobMatchContext == null || jobMatchContext.isBlank()) {
+            return "暂无简历-岗位匹配报告。";
+        }
+        return PromptSecurityConstants.DATA_BOUNDARY_INSTRUCTION + "\n" +
+            "## 简历-岗位匹配报告\n" +
+            "请优先围绕报告中的主要差距和行动项出题，但不要直接泄露报告原文给候选人：\n" +
+            promptSanitizer.wrapWithDelimiters("job_match_report", promptSanitizer.sanitize(jobMatchContext));
     }
 
     private String buildSkillPersonaSection(SkillDTO skill) {

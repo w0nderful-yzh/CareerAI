@@ -133,6 +133,28 @@ public class JobMatchService {
         return reports.stream().map(this::toDTO).toList();
     }
 
+    public String buildInterviewContext(Long matchReportId, Long jobId, Long resumeId) {
+        Long userId = currentUserService.currentUserId();
+        JobMatchReportEntity report = loadReportForInterview(userId, matchReportId, jobId, resumeId);
+        if (report == null) {
+            return "";
+        }
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("## 简历-岗位匹配报告\n");
+        sb.append("- 岗位：").append(report.getJobTitle()).append('\n');
+        sb.append("- 简历：").append(report.getResumeFilename()).append('\n');
+        sb.append("- 总体匹配度：").append(report.getOverallScore()).append("/100\n");
+        sb.append("- 技能匹配：").append(report.getSkillScore()).append("/100\n");
+        sb.append("- 项目支撑：").append(report.getProjectScore()).append("/100\n");
+        sb.append("- 关键词覆盖：").append(report.getKeywordScore()).append("/100\n");
+        sb.append("- 匹配结论：").append(report.getSummary()).append("\n\n");
+        appendList(sb, "匹配亮点", readList(report.getMatchedHighlightsJson()));
+        appendList(sb, "主要差距", readList(report.getGapsJson()));
+        appendList(sb, "行动项", readList(report.getActionItemsJson()));
+        return sb.toString();
+    }
+
     private JobMatchAnalysisDTO analyzeMatch(ResumeEntity resume, JobEntity job) {
         try {
             Map<String, Object> variables = new HashMap<>();
@@ -163,6 +185,28 @@ public class JobMatchService {
             log.error("简历岗位匹配失败: {}", e.getMessage(), e);
             throw new BusinessException(ErrorCode.JOB_MATCH_FAILED, "简历岗位匹配失败：" + e.getMessage());
         }
+    }
+
+    private JobMatchReportEntity loadReportForInterview(
+        Long userId,
+        Long matchReportId,
+        Long jobId,
+        Long resumeId
+    ) {
+        if (matchReportId != null) {
+            return reportRepository.findByIdAndUserId(matchReportId, userId).orElse(null);
+        }
+        if (jobId != null && resumeId != null) {
+            return reportRepository.findFirstByUserIdAndJobIdAndResumeIdOrderByCreatedAtDesc(
+                userId,
+                jobId,
+                resumeId
+            ).orElse(null);
+        }
+        if (jobId != null) {
+            return reportRepository.findFirstByUserIdAndJobIdOrderByCreatedAtDesc(userId, jobId).orElse(null);
+        }
+        return null;
     }
 
     private JobMatchReportDTO toDTO(JobMatchReportEntity entity) {
@@ -208,6 +252,17 @@ public class JobMatchService {
             log.warn("读取岗位匹配报告列表字段失败: {}", e.getMessage());
             return List.of();
         }
+    }
+
+    private void appendList(StringBuilder sb, String title, List<String> items) {
+        if (items == null || items.isEmpty()) {
+            return;
+        }
+        sb.append("### ").append(title).append('\n');
+        for (String item : items.stream().limit(5).toList()) {
+            sb.append("- ").append(item).append('\n');
+        }
+        sb.append('\n');
     }
 
     private int clampScore(Integer score) {

@@ -31,6 +31,8 @@ export interface CreateInterviewRequest {
   difficulty?: string;
   customCategories?: CategoryDTO[];
   jdText?: string;
+  jobId?: number;
+  matchReportId?: number;
 }
 
 export interface SubmitAnswerRequest {

@@ -18,6 +18,7 @@ import com.yzh666.careerai.modules.interview.model.InterviewSessionEntity;
 import com.yzh666.careerai.modules.interview.model.SubmitAnswerRequest;
 import com.yzh666.careerai.modules.interview.model.SubmitAnswerResponse;
 import com.yzh666.careerai.modules.interview.model.InterviewSessionDTO.SessionStatus;
+import com.yzh666.careerai.modules.jobmatch.service.JobMatchService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
@@ -46,6 +47,7 @@ public class InterviewSessionService {
     private final ObjectMapper objectMapper;
     private final EvaluateStreamProducer evaluateStreamProducer;
     private final LlmProviderRegistry llmProviderRegistry;
+    private final JobMatchService jobMatchService;
 
     /**
      * 创建新的面试会话
@@ -73,6 +75,11 @@ public class InterviewSessionService {
         // 获取历史问题（通用模式按 skillId 查询，有简历时按 resumeId + skillId 精确匹配）
         List<HistoricalQuestion> historicalQuestions =
             persistenceService.getHistoricalQuestions(skillId, request.resumeId());
+        String jobMatchContext = jobMatchService.buildInterviewContext(
+            request.matchReportId(),
+            request.jobId(),
+            request.resumeId()
+        );
 
         // 基于 Skill 生成面试问题
         List<InterviewQuestionDTO> questions = questionService.generateQuestionsBySkill(
@@ -83,7 +90,8 @@ public class InterviewSessionService {
             request.questionCount(),
             historicalQuestions,
             request.customCategories(),
-            request.jdText()
+            request.jdText(),
+            jobMatchContext
         );
 
         // 保存到 Redis 缓存

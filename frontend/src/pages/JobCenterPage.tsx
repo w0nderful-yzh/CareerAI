@@ -164,7 +164,7 @@ export default function JobCenterPage() {
   };
 
   const createMatchReport = async (job: JobItem) => {
-    const selectedResumeId = selectedResumeIds[job.id] ?? resumes[0]?.id?.toString();
+    const selectedResumeId = getSelectedResumeId(job);
     if (!selectedResumeId) {
       setError('请先上传一份简历，再生成岗位匹配报告。');
       return;
@@ -188,15 +188,33 @@ export default function JobCenterPage() {
     }
   };
 
+  const getSelectedResumeId = (job: JobItem) => (
+    selectedResumeIds[job.id] ?? resumes[0]?.id?.toString() ?? ''
+  );
+
+  const getSelectedResumeReport = (job: JobItem) => {
+    const selectedResumeId = Number(getSelectedResumeId(job));
+    if (!selectedResumeId) {
+      return undefined;
+    }
+    return reportsByJob[job.id]?.find(report => report.resumeId === selectedResumeId);
+  };
+
   const startInterview = (job: JobItem) => {
+    const selectedResumeId = getSelectedResumeId(job);
+    const selectedReport = getSelectedResumeReport(job);
+
     navigate('/interview', {
       state: {
+        resumeId: selectedResumeId ? Number(selectedResumeId) : undefined,
         interviewConfig: {
           skillId: CUSTOM_SKILL_ID,
           difficulty: 'mid',
           questionCount: 6,
           jdText: job.jdText,
           customCategories: job.parsedCategories,
+          jobId: job.id,
+          matchReportId: selectedReport?.id,
         },
       },
     });
@@ -384,7 +402,7 @@ export default function JobCenterPage() {
                     </div>
                     <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
                       <select
-                        value={selectedResumeIds[job.id] ?? resumes[0]?.id?.toString() ?? ''}
+                        value={getSelectedResumeId(job)}
                         onChange={event => setSelectedResumeIds(prev => ({
                           ...prev,
                           [job.id]: event.target.value,
@@ -410,8 +428,8 @@ export default function JobCenterPage() {
                         生成报告
                       </button>
                     </div>
-                    {reportsByJob[job.id]?.[0] ? (
-                      <MatchReportCard report={reportsByJob[job.id][0]} />
+                    {getSelectedResumeReport(job) ? (
+                      <MatchReportCard report={getSelectedResumeReport(job)!} />
                     ) : (
                       <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
                         选择一份简历，生成它和当前 JD 的匹配度、短板和改进清单。
