@@ -4,6 +4,7 @@ import com.yzh666.careerai.common.annotation.RateLimit;
 import com.yzh666.careerai.common.result.Result;
 import com.yzh666.careerai.modules.resume.model.ResumeDetailDTO;
 import com.yzh666.careerai.modules.resume.model.ResumeListItemDTO;
+import com.yzh666.careerai.modules.resume.model.ResumeStatsDTO;
 import com.yzh666.careerai.modules.resume.service.ResumeDeleteService;
 import com.yzh666.careerai.modules.resume.service.ResumeHistoryService;
 import com.yzh666.careerai.modules.resume.service.ResumeUploadService;
@@ -65,6 +66,15 @@ public class ResumeController {
     public Result<List<ResumeListItemDTO>> getAllResumes() {
         List<ResumeListItemDTO> resumes = historyService.getAllResumes();
         return Result.success(resumes);
+    }
+
+    /**
+     * 获取简历统计信息
+     */
+    @GetMapping("/api/resumes/statistics")
+    public Result<ResumeStatsDTO> getStatistics() {
+        ResumeStatsDTO statistics = historyService.getStatistics();
+        return Result.success(statistics);
     }
 
     /**
