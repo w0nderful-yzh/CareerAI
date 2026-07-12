@@ -38,6 +38,7 @@ cd frontend && pnpm dev
 - Do not call LLM, S3 or external HTTP services inside database transactions.
 - Keep AI structured output behind `StructuredOutputInvoker` and provider access behind
   `LlmProviderRegistry`.
+- Use OpenFeign clients for synchronous service-to-service calls after a module is split out.
 - Keep secrets in `.env`; commit only `.env.example`.
 - Use Java 21, constructor injection, 2-space indentation and no wildcard imports.
 

@@ -43,6 +43,7 @@
     <dashscope.version>2.22.7</dashscope.version>
     <victools.version>5.0.0</victools.version>
     <spring-cloud-gateway.version>5.0.0</spring-cloud-gateway.version>
+    <spring-cloud-openfeign.version>5.0.0</spring-cloud-openfeign.version>
     <spring-cloud-alibaba.version>2025.1.0.0</spring-cloud-alibaba.version>
   </properties>
 

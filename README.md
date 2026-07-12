@@ -140,7 +140,8 @@ flowchart TB
 - [x] 完成 RAG 来源引用、元数据过滤和聊天记录来源持久化。
 - [x] 抽出第一阶段 `knowledge-service`，独立承载知识库、向量化和 RAG 会话。
 - [x] 接入 Gateway 和 Nacos，完成基于服务发现的网关路由。
-- [ ] 接入 OpenFeign，逐步从主应用移除已拆分 Controller。
+- [x] 接入 OpenFeign，打通主应用到知识库服务的服务间调用。
+- [ ] 逐步从主应用移除已拆分 Controller。
 - [ ] 完成端到端测试、可观测性、部署和项目演示材料。
 
 完整任务和验收标准见 [CareerAI 改造工作清单](docs/CareerAI-改造工作清单.md)。
@@ -243,6 +244,12 @@ NACOS_GROUP=DEFAULT_GROUP
 | `/api/knowledgebase/**` | `lb://knowledge-service` |
 | `/api/rag-chat/**` | `lb://knowledge-service` |
 | 其它 `/api/**` | `lb://careerai-app` |
+
+主应用通过 OpenFeign 调用知识库服务：
+
+| 主应用接口 | 内部调用 |
+| --- | --- |
+| `/api/system/downstreams/knowledge-service/health` | `careerai-app -> OpenFeign -> knowledge-service /actuator/health` |
 
 启动前端：
 
