@@ -153,13 +153,25 @@ CareerAI/
 ├── frontend/                         # React + TypeScript + Vite
 ├── backend/
 │   ├── pom.xml                       # Maven 父工程
-│   ├── gateway-service/              # API 网关，按路径路由到主应用和知识库服务
+│   ├── gateway-service/              # API 网关，按路径路由到各业务服务
 │   │   ├── pom.xml
 │   │   └── src/
-│   ├── careerai-app/                 # 当前主应用，保留完整业务闭环
+│   ├── user-service/                 # 用户注册、登录、当前用户
 │   │   ├── pom.xml
 │   │   └── src/
-│   └── knowledge-service/            # 第一阶段拆出的知识库/RAG 服务
+│   ├── resume-service/               # 简历上传、解析、分析和历史
+│   │   ├── pom.xml
+│   │   └── src/
+│   ├── job-service/                  # 岗位中心、JD 解析、匹配报告和改进计划
+│   │   ├── pom.xml
+│   │   └── src/
+│   ├── interview-service/            # 模拟面试、面试记录和面试日程
+│   │   ├── pom.xml
+│   │   └── src/
+│   ├── knowledge-service/            # 知识库/RAG 服务
+│   │   ├── pom.xml
+│   │   └── src/
+│   └── careerai-app/                 # legacy 兜底应用，后续继续瘦身
 │       ├── pom.xml
 │       └── src/
 ├── docs/
@@ -172,7 +184,7 @@ CareerAI/
 └── README.md
 ```
 
-后续会继续在 `backend/` 下增加用户、简历、岗位、面试和 AI 服务模块，并逐步把已拆出的能力从 `careerai-app` 迁移到独立服务调用。
+当前微服务版保留同一套 PostgreSQL、Redis、RabbitMQ 和 RustFS，优先完成进程级拆分与网关路由；后续再抽取 `careerai-common` 并逐步改为 OpenFeign 跨服务调用。
 
 ## 本地开发
 
@@ -199,14 +211,18 @@ sdk env
 ```bash
 cd backend
 mvn clean test
-mvn -pl careerai-app spring-boot:run
+mvn -pl user-service spring-boot:run
+mvn -pl resume-service spring-boot:run
+mvn -pl job-service spring-boot:run
+mvn -pl interview-service spring-boot:run
+mvn -pl knowledge-service spring-boot:run
 ```
 
-启动已拆出的知识库/RAG 服务：
+可选启动 legacy 兜底应用：
 
 ```bash
 cd backend
-mvn -pl knowledge-service spring-boot:run
+mvn -pl careerai-app spring-boot:run
 ```
 
 启动网关：
@@ -216,7 +232,7 @@ cd backend
 mvn -pl gateway-service spring-boot:run
 ```
 
-默认端口：主应用 `8080`，知识库服务 `8081`，网关 `8090`。当前阶段服务仍连接同一套本地 PostgreSQL、Redis、RabbitMQ、RustFS 和 Nacos，中间件仍直接使用本地 Docker 容器，不使用 Docker Compose。
+默认端口：legacy 主应用 `8080`，知识库服务 `8081`，用户服务 `8082`，简历服务 `8083`，岗位服务 `8084`，面试服务 `8085`，网关 `8090`。当前阶段服务仍连接同一套本地 PostgreSQL、Redis、RabbitMQ、RustFS 和 Nacos，中间件仍直接使用本地 Docker 容器，不使用 Docker Compose。
 
 启动本地 Nacos：
 
@@ -243,6 +259,10 @@ NACOS_GROUP=DEFAULT_GROUP
 | --- | --- |
 | `/api/knowledgebase/**` | `http://localhost:8081` |
 | `/api/rag-chat/**` | `http://localhost:8081` |
+| `/api/auth/**`、`/api/users/**` | `http://localhost:8082` |
+| `/api/resumes/**` | `http://localhost:8083` |
+| `/api/jobs/**`、`/api/job-matches/**`、`/api/career-reports/**`、`/api/resume-improvement-plans/**` | `http://localhost:8084` |
+| `/api/interview/**`、`/api/interview-schedule/**` | `http://localhost:8085` |
 | 其它 `/api/**` | `http://localhost:8080` |
 
 如需验证 Nacos 负载均衡路由，可在启动 `gateway-service` 前设置：
@@ -250,6 +270,10 @@ NACOS_GROUP=DEFAULT_GROUP
 ```env
 GATEWAY_APP_ROUTE_URI=lb://careerai-app
 GATEWAY_KNOWLEDGE_ROUTE_URI=lb://knowledge-service
+GATEWAY_USER_ROUTE_URI=lb://user-service
+GATEWAY_RESUME_ROUTE_URI=lb://resume-service
+GATEWAY_JOB_ROUTE_URI=lb://job-service
+GATEWAY_INTERVIEW_ROUTE_URI=lb://interview-service
 ```
 
 主应用通过 OpenFeign 调用知识库服务：
@@ -268,7 +292,7 @@ pnpm dev
 ```
 
 默认访问地址：前端 `http://localhost:5173`，主应用 Swagger UI `http://localhost:8080/swagger-ui.html`，API 网关 `http://localhost:8090`。
-前端开发代理默认走 API 网关 `http://localhost:8090`，需要同时启动 `gateway-service`、`careerai-app`、`knowledge-service` 和 Nacos。若临时只启动主应用调试，可设置 `VITE_API_PROXY_TARGET=http://localhost:8080` 直连 `careerai-app`。
+前端开发代理默认走 API 网关 `http://localhost:8090`，需要同时启动 `gateway-service`、`user-service`、`resume-service`、`job-service`、`interview-service`、`knowledge-service` 和 Nacos。若临时只启动主应用调试，可设置 `VITE_API_PROXY_TARGET=http://localhost:8080` 直连 `careerai-app`。
 
 ## 开发顺序建议
 

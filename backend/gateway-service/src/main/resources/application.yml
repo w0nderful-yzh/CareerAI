@@ -34,6 +34,28 @@ spring:
               uri: ${GATEWAY_KNOWLEDGE_ROUTE_URI:http://localhost:8081}
               predicates:
                 - Path=/api/knowledgebase/**,/api/rag-chat/**
+            - id: user-service
+              uri: ${GATEWAY_USER_ROUTE_URI:http://localhost:8082}
+              predicates:
+                - Path=/api/auth/**,/api/users/**
+            - id: resume-service
+              uri: ${GATEWAY_RESUME_ROUTE_URI:http://localhost:8083}
+              predicates:
+                - Path=/api/resumes,/api/resumes/**
+              filters:
+                - Retry=2
+            - id: job-service
+              uri: ${GATEWAY_JOB_ROUTE_URI:http://localhost:8084}
+              predicates:
+                - Path=/api/jobs,/api/jobs/**,/api/job-matches,/api/job-matches/**,/api/career-reports,/api/career-reports/**,/api/resume-improvement-plans,/api/resume-improvement-plans/**
+              filters:
+                - Retry=2
+            - id: interview-service
+              uri: ${GATEWAY_INTERVIEW_ROUTE_URI:http://localhost:8085}
+              predicates:
+                - Path=/api/interview,/api/interview/**,/api/interview-schedule,/api/interview-schedule/**
+              filters:
+                - Retry=2
             - id: careerai-app
               uri: ${GATEWAY_APP_ROUTE_URI:http://localhost:8080}
               predicates:

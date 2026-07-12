@@ -7,6 +7,7 @@ import com.yzh666.careerai.modules.knowledgebase.model.VectorStatus;
 import com.yzh666.careerai.modules.knowledgebase.repository.KnowledgeBaseRepository;
 import com.yzh666.careerai.modules.knowledgebase.service.KnowledgeBaseVectorService;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.redisson.api.stream.StreamMessageId;
 import org.springframework.stereotype.Component;
 
@@ -17,6 +18,7 @@ import java.util.Map;
  * 负责从 Redis Stream 消费消息并执行向量化
  */
 @Slf4j
+@ConditionalOnProperty(prefix = "app.redis-stream.vectorize", name = "consumer-enabled", havingValue = "true", matchIfMissing = true)
 @Component
 public class VectorizeStreamConsumer extends AbstractStreamConsumer<VectorizeStreamConsumer.VectorizePayload> {
 
