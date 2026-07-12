@@ -139,7 +139,8 @@ flowchart TB
 - [x] 完成面向目标岗位的文字模拟面试。
 - [x] 完成 RAG 来源引用、元数据过滤和聊天记录来源持久化。
 - [x] 抽出第一阶段 `knowledge-service`，独立承载知识库、向量化和 RAG 会话。
-- [ ] 接入 Gateway、Nacos、OpenFeign，逐步从主应用移除已拆分 Controller。
+- [x] 接入 Gateway 和 Nacos，完成基于服务发现的网关路由。
+- [ ] 接入 OpenFeign，逐步从主应用移除已拆分 Controller。
 - [ ] 完成端到端测试、可观测性、部署和项目演示材料。
 
 完整任务和验收标准见 [CareerAI 改造工作清单](docs/CareerAI-改造工作清单.md)。
@@ -183,7 +184,7 @@ CareerAI/
 | RustFS / S3 | `v-rustfs` | `9000/9001` | 必需 |
 | MySQL | `mysql8` | `3306` | 用户/岗位服务拆分时接入 |
 | RabbitMQ | `rabbitmq` | `5672/15672` | 开启 `APP_RABBITMQ_ENABLED=true` 后用于岗位匹配异步链路 |
-| Nacos | `nacos` | `8848/9848/9849` | 微服务拆分时接入 |
+| Nacos | `nacos` | `8848/9848/9849` | 服务注册与发现 |
 
 本地 PostgreSQL 容器中需要独立的 `careerai` 数据库和 `vector` 扩展。复制配置模板并填写本机已有容器的真实凭证：
 
@@ -214,15 +215,34 @@ cd backend
 mvn -pl gateway-service spring-boot:run
 ```
 
-默认端口：主应用 `8080`，知识库服务 `8081`，网关 `8090`。当前阶段服务仍连接同一套本地 PostgreSQL、Redis 和 RustFS，中间件仍直接使用本地 Docker 容器，不使用 Docker Compose。
+默认端口：主应用 `8080`，知识库服务 `8081`，网关 `8090`。当前阶段服务仍连接同一套本地 PostgreSQL、Redis、RabbitMQ、RustFS 和 Nacos，中间件仍直接使用本地 Docker 容器，不使用 Docker Compose。
 
-网关第一阶段使用静态路由：
+启动本地 Nacos：
+
+```bash
+docker run -d --name nacos \
+  -e MODE=standalone \
+  -p 8848:8848 -p 9848:9848 -p 9849:9849 \
+  nacos/nacos-server:v2.4.3
+```
+
+服务注册默认读取：
+
+```env
+NACOS_DISCOVERY_ENABLED=true
+NACOS_REGISTER_ENABLED=true
+NACOS_SERVER_ADDR=localhost:8848
+NACOS_NAMESPACE=
+NACOS_GROUP=DEFAULT_GROUP
+```
+
+网关通过 Nacos 服务发现路由：
 
 | 路径 | 转发目标 |
 | --- | --- |
-| `/api/knowledgebase/**` | `knowledge-service` |
-| `/api/rag-chat/**` | `knowledge-service` |
-| 其它 `/api/**` | `careerai-app` |
+| `/api/knowledgebase/**` | `lb://knowledge-service` |
+| `/api/rag-chat/**` | `lb://knowledge-service` |
+| 其它 `/api/**` | `lb://careerai-app` |
 
 启动前端：
 

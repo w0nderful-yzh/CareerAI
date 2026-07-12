@@ -8,6 +8,7 @@ import org.springframework.ai.model.openai.autoconfigure.OpenAiImageAutoConfigur
 import org.springframework.ai.model.openai.autoconfigure.OpenAiModerationAutoConfiguration;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
@@ -15,6 +16,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  * 独立承载知识库、向量化和 RAG 问答能力。
  */
 @EnableScheduling
+@EnableDiscoveryClient
 @SpringBootApplication(exclude = {
     OpenAiAudioSpeechAutoConfiguration.class,
     OpenAiAudioTranscriptionAutoConfiguration.class,

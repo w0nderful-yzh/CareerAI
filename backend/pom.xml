@@ -43,6 +43,7 @@
     <dashscope.version>2.22.7</dashscope.version>
     <victools.version>5.0.0</victools.version>
     <spring-cloud-gateway.version>5.0.0</spring-cloud-gateway.version>
+    <spring-cloud-alibaba.version>2025.1.0.0</spring-cloud-alibaba.version>
   </properties>
 
   <dependencyManagement>
@@ -58,6 +59,13 @@
         <groupId>org.springaicommunity</groupId>
         <artifactId>spring-ai-agent-utils-bom</artifactId>
         <version>${spring-ai-agent-utils.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>com.alibaba.cloud</groupId>
+        <artifactId>spring-cloud-alibaba-dependencies</artifactId>
+        <version>${spring-cloud-alibaba.version}</version>
         <type>pom</type>
         <scope>import</scope>
       </dependency>

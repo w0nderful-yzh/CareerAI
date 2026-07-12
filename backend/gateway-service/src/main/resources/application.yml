@@ -17,15 +17,24 @@ spring:
   cloud:
     compatibility-verifier:
       enabled: false
+    nacos:
+      discovery:
+        enabled: ${NACOS_DISCOVERY_ENABLED:true}
+        register-enabled: ${NACOS_REGISTER_ENABLED:true}
+        server-addr: ${NACOS_SERVER_ADDR:localhost:8848}
+        namespace: ${NACOS_NAMESPACE:}
+        group: ${NACOS_GROUP:DEFAULT_GROUP}
+        username: ${NACOS_USERNAME:}
+        password: ${NACOS_PASSWORD:}
     gateway:
       mvc:
         routes:
           - id: knowledge-service
-            uri: ${CAREERAI_KNOWLEDGE_SERVICE_URL:http://localhost:8081}
+            uri: lb://knowledge-service
             predicates:
               - Path=/api/knowledgebase/**,/api/rag-chat/**
           - id: careerai-app
-            uri: ${CAREERAI_APP_URL:http://localhost:8080}
+            uri: lb://careerai-app
             predicates:
               - Path=/api/**,/actuator/**,/swagger-ui/**,/v3/api-docs/**
 

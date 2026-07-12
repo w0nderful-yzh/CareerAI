@@ -54,4 +54,5 @@ cd frontend && pnpm dev
 - Knowledge-service-only changes: `cd backend && mvn -pl knowledge-service test`.
 - Gateway-only changes: `cd backend && mvn -pl gateway-service test`.
 - Frontend changes: `cd frontend && pnpm build`.
-- Configuration changes: verify against the named local Docker containers documented in README.
+- Configuration changes: verify against the named local Docker containers documented in README,
+  especially Nacos registration when touching service discovery.
