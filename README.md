@@ -4,7 +4,7 @@
 
 CareerAI 基于 [InterviewGuide](https://github.com/Snailclimb/interview-guide) 进行二次开发，围绕“简历、目标岗位和面试表现”建立完整的求职闭环，而不是仅对上游项目进行改名或界面换皮。
 
-> 当前状态：已从上游提交 `8c80a195` 完成源码迁移，目录调整为 `frontend + backend`，后端已从 Gradle 转换为 Java 21 Maven 聚合工程。用户体系、岗位匹配和微服务拆分仍在后续路线图中。
+> 当前状态：已从上游提交 `8c80a195` 完成源码迁移，目录调整为 `frontend + backend`，后端已从 Gradle 转换为 Java 21 Maven 聚合工程。核心业务闭环已进入可演示阶段，微服务拆分已先抽出 `knowledge-service` 作为知识库/RAG 服务。
 
 ## 项目定位
 
@@ -137,8 +137,9 @@ flowchart TB
 - [x] 实现岗位中心、JD 解析和岗位匹配报告。
 - [x] 将简历-岗位匹配迁移为 RabbitMQ 可靠异步链路。
 - [x] 完成面向目标岗位的文字模拟面试。
-- [ ] 将 RAG 与简历、岗位和面试薄弱点融合。
-- [ ] 接入 Gateway、Nacos、OpenFeign 并按边界拆分微服务。
+- [x] 完成 RAG 来源引用、元数据过滤和聊天记录来源持久化。
+- [x] 抽出第一阶段 `knowledge-service`，独立承载知识库、向量化和 RAG 会话。
+- [ ] 接入 Gateway、Nacos、OpenFeign，逐步从主应用移除已拆分 Controller。
 - [ ] 完成端到端测试、可观测性、部署和项目演示材料。
 
 完整任务和验收标准见 [CareerAI 改造工作清单](docs/CareerAI-改造工作清单.md)。
@@ -150,7 +151,10 @@ CareerAI/
 ├── frontend/                         # React + TypeScript + Vite
 ├── backend/
 │   ├── pom.xml                       # Maven 父工程
-│   └── careerai-app/                 # 当前可运行单体
+│   ├── careerai-app/                 # 当前主应用，保留完整业务闭环
+│   │   ├── pom.xml
+│   │   └── src/
+│   └── knowledge-service/            # 第一阶段拆出的知识库/RAG 服务
 │       ├── pom.xml
 │       └── src/
 ├── docs/
@@ -163,7 +167,7 @@ CareerAI/
 └── README.md
 ```
 
-业务闭环稳定后，再在 `backend/` 下增加 Gateway、用户、简历、岗位、面试、知识库和 AI 服务模块。
+后续会继续在 `backend/` 下增加 Gateway、用户、简历、岗位、面试和 AI 服务模块，并逐步把已拆出的能力从 `careerai-app` 迁移到独立服务调用。
 
 ## 本地开发
 
@@ -192,6 +196,15 @@ cd backend
 mvn clean test
 mvn -pl careerai-app spring-boot:run
 ```
+
+启动已拆出的知识库/RAG 服务：
+
+```bash
+cd backend
+mvn -pl knowledge-service spring-boot:run
+```
+
+默认端口：主应用 `8080`，知识库服务 `8081`。当前阶段两个服务仍连接同一套本地 PostgreSQL、Redis 和 RustFS，中间件仍直接使用本地 Docker 容器，不使用 Docker Compose。
 
 启动前端：
 

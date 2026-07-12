@@ -9,6 +9,7 @@ stable.
 - `frontend/`: React 18, TypeScript, Vite and Tailwind CSS.
 - `backend/pom.xml`: Maven parent and dependency management.
 - `backend/careerai-app/`: Spring Boot application.
+- `backend/knowledge-service/`: first split-out knowledge base and RAG service.
 - `docs/`: architecture, migration and delivery notes.
 
 ## Commands
@@ -17,6 +18,7 @@ stable.
 sdk env
 cd backend && mvn clean test
 cd backend && mvn -pl careerai-app spring-boot:run
+cd backend && mvn -pl knowledge-service spring-boot:run
 ```
 
 ```bash
@@ -47,5 +49,6 @@ cd frontend && pnpm dev
 ## Verification
 
 - Backend changes: `cd backend && mvn test`.
+- Knowledge-service-only changes: `cd backend && mvn -pl knowledge-service test`.
 - Frontend changes: `cd frontend && pnpm build`.
 - Configuration changes: verify against the named local Docker containers documented in README.

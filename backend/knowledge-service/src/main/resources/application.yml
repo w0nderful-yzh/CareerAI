@@ -1,0 +1,144 @@
+logging:
+  charset:
+    console: UTF-8
+    file: UTF-8
+
+server:
+  port: ${KNOWLEDGE_SERVICE_PORT:8081}
+  servlet:
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+  api-docs:
+    path: /v3/api-docs
+  packages-to-scan: com.yzh666.careerai.modules.knowledgebase,com.yzh666.careerai.modules.user
+
+spring:
+  config:
+    import:
+      - optional:file:.env[.properties]
+      - optional:file:../.env[.properties]
+      - optional:file:../../.env[.properties]
+  application:
+    name: knowledge-service
+
+  threads:
+    virtual:
+      enabled: true
+
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:careerai}
+    username: ${POSTGRES_USER:postgres}
+    password: ${POSTGRES_PASSWORD:}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 50MB
+      max-request-size: 50MB
+
+  redis:
+    redisson:
+      config: |
+        singleServerConfig:
+          address: "redis://${REDIS_HOST:localhost}:${REDIS_PORT:6379}"
+          database: ${REDIS_DATABASE:1}
+          connectionMinimumIdleSize: 10
+          connectionPoolSize: 64
+          subscriptionConnectionMinimumIdleSize: 1
+          subscriptionConnectionPoolSize: 50
+
+  ai:
+    retry:
+      max-attempts: 1
+      on-client-errors: false
+    vectorstore:
+      pgvector:
+        index-type: HNSW
+        distance-type: COSINE_DISTANCE
+        dimensions: 1024
+        initialize-schema: true
+        remove-existing-vector-store-table: false
+
+app:
+  auth:
+    jwt-secret: ${APP_AUTH_JWT_SECRET:careerai-dev-jwt-secret-change-me-at-least-32}
+    access-token-ttl-minutes: ${APP_AUTH_ACCESS_TOKEN_TTL_MINUTES:120}
+    anonymous-user:
+      enabled: ${APP_AUTH_ANONYMOUS_USER_ENABLED:true}
+      username: ${APP_AUTH_ANONYMOUS_USERNAME:local-dev}
+
+  ai:
+    default-provider: ${APP_AI_DEFAULT_PROVIDER:dashscope}
+    default-embedding-provider: ${APP_AI_DEFAULT_EMBEDDING_PROVIDER:dashscope}
+    embedding-dimensions: ${APP_AI_EMBEDDING_DIMENSIONS:1024}
+    security:
+      api-key-encryption-key: ${APP_AI_CONFIG_ENCRYPTION_KEY:}
+      require-encryption-key: ${APP_AI_CONFIG_REQUIRE_ENCRYPTION_KEY:true}
+      allow-fallback-encryption-key: ${APP_AI_CONFIG_ALLOW_FALLBACK_ENCRYPTION_KEY:false}
+    providers:
+      dashscope:
+        base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
+        api-key: ${AI_BAILIAN_API_KEY:}
+        model: ${AI_MODEL:qwen3.5-flash}
+        embedding-model: text-embedding-v3
+        embedding-dimensions: 1024
+        supports-embedding: true
+      deepseek:
+        base-url: https://api.deepseek.com
+        api-key: ${PROVIDER_DEEPSEEK_API_KEY:}
+        model: ${PROVIDER_DEEPSEEK_MODEL:deepseek-v4-flash}
+        supports-embedding: false
+      glm:
+        base-url: https://open.bigmodel.cn/api/coding/paas/v4
+        api-key: ${PROVIDER_GLM_API_KEY:}
+        model: ${PROVIDER_GLM_MODEL:glm-5}
+        embedding-model: embedding-3
+        embedding-dimensions: 1024
+        supports-embedding: true
+    advisors:
+      enabled: ${APP_AI_ADVISORS_ENABLED:true}
+      tool-call-enabled: ${APP_AI_ADVISORS_TOOL_CALL_ENABLED:false}
+      tool-call-conversation-history-enabled: false
+      message-chat-memory-enabled: false
+      message-chat-memory-max-messages: 120
+      simple-logger-enabled: ${APP_AI_ADVISORS_SIMPLE_LOGGER_ENABLED:false}
+    rag:
+      rewrite:
+        enabled: ${APP_AI_RAG_REWRITE_ENABLED:true}
+      search:
+        short-query-length: ${APP_AI_RAG_SHORT_QUERY_LENGTH:4}
+        topk-short: ${APP_AI_RAG_TOPK_SHORT:20}
+        topk-medium: ${APP_AI_RAG_TOPK_MEDIUM:12}
+        topk-long: ${APP_AI_RAG_TOPK_LONG:8}
+        min-score-short: ${APP_AI_RAG_MIN_SCORE_SHORT:0.18}
+        min-score-default: ${APP_AI_RAG_MIN_SCORE_DEFAULT:0.28}
+
+  storage:
+    endpoint: ${APP_STORAGE_ENDPOINT:http://localhost:9000}
+    access-key: ${APP_STORAGE_ACCESS_KEY:}
+    secret-key: ${APP_STORAGE_SECRET_KEY:}
+    bucket: ${APP_STORAGE_BUCKET:careerai}
+    region: ${APP_STORAGE_REGION:us-east-1}
+    api-call-timeout: ${APP_STORAGE_API_CALL_TIMEOUT:60s}
+    api-call-attempt-timeout: ${APP_STORAGE_API_CALL_ATTEMPT_TIMEOUT:20s}
+    auto-create-bucket: ${APP_STORAGE_AUTO_CREATE_BUCKET:true}
+
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:5174,http://localhost:80,http://127.0.0.1:5173,http://127.0.0.1:5174,http://127.0.0.1:80}

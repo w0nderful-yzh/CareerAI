@@ -1,0 +1,31 @@
+package com.yzh666.careerai;
+
+import org.springframework.ai.model.openai.autoconfigure.OpenAiAudioSpeechAutoConfiguration;
+import org.springframework.ai.model.openai.autoconfigure.OpenAiAudioTranscriptionAutoConfiguration;
+import org.springframework.ai.model.openai.autoconfigure.OpenAiChatAutoConfiguration;
+import org.springframework.ai.model.openai.autoconfigure.OpenAiEmbeddingAutoConfiguration;
+import org.springframework.ai.model.openai.autoconfigure.OpenAiImageAutoConfiguration;
+import org.springframework.ai.model.openai.autoconfigure.OpenAiModerationAutoConfiguration;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableScheduling;
+
+/**
+ * CareerAI Knowledge Service.
+ * 独立承载知识库、向量化和 RAG 问答能力。
+ */
+@EnableScheduling
+@SpringBootApplication(exclude = {
+    OpenAiAudioSpeechAutoConfiguration.class,
+    OpenAiAudioTranscriptionAutoConfiguration.class,
+    OpenAiChatAutoConfiguration.class,
+    OpenAiEmbeddingAutoConfiguration.class,
+    OpenAiImageAutoConfiguration.class,
+    OpenAiModerationAutoConfiguration.class
+})
+public class KnowledgeServiceApplication {
+
+  public static void main(String[] args) {
+    SpringApplication.run(KnowledgeServiceApplication.class, args);
+  }
+}
