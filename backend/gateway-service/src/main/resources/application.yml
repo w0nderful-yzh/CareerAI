@@ -38,6 +38,8 @@ spring:
               uri: lb://careerai-app
               predicates:
                 - Path=/api/**,/actuator/**,/swagger-ui/**,/v3/api-docs/**
+              filters:
+                - Retry=2
 
 management:
   endpoints:
