@@ -13,5 +13,10 @@ public interface ResumeImprovementPlanRepository extends JpaRepository<ResumeImp
 
     List<ResumeImprovementPlanEntity> findByUserIdAndMatchReportIdOrderByCreatedAtDesc(Long userId, Long matchReportId);
 
+    Optional<ResumeImprovementPlanEntity> findFirstByUserIdAndMatchReportIdOrderByCreatedAtDesc(
+        Long userId,
+        Long matchReportId
+    );
+
     Optional<ResumeImprovementPlanEntity> findByIdAndUserId(Long id, Long userId);
 }

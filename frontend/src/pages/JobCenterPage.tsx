@@ -6,6 +6,7 @@ import {
   Building2,
   CheckCircle2,
   ClipboardCheck,
+  Download,
   ExternalLink,
   FileText,
   Loader2,
@@ -21,6 +22,7 @@ import { getErrorMessage } from '../api/request';
 import { historyApi, type ResumeListItem } from '../api/history';
 import { jobApi, type JobItem, type JobStatus } from '../api/jobs';
 import { jobMatchApi, type JobMatchReport } from '../api/jobMatches';
+import { careerReportApi } from '../api/careerReports';
 import {
   resumeImprovementPlanApi,
   type ResumeImprovementPlan,
@@ -66,6 +68,7 @@ export default function JobCenterPage() {
   const [parsing, setParsing] = useState(false);
   const [matchingJobId, setMatchingJobId] = useState<number | null>(null);
   const [planningReportId, setPlanningReportId] = useState<number | null>(null);
+  const [exportingReportId, setExportingReportId] = useState<number | null>(null);
   const [error, setError] = useState('');
 
   const [title, setTitle] = useState('');
@@ -228,6 +231,26 @@ export default function JobCenterPage() {
       setError(getErrorMessage(err));
     } finally {
       setPlanningReportId(null);
+    }
+  };
+
+  const exportCareerReport = async (report: JobMatchReport) => {
+    setExportingReportId(report.id);
+    setError('');
+    try {
+      const blob = await careerReportApi.exportPdf(report.id);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `求职综合报告_${report.jobTitle}_${report.resumeFilename}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setExportingReportId(null);
     }
   };
 
@@ -483,7 +506,10 @@ export default function JobCenterPage() {
                         report={getSelectedResumeReport(job)!}
                         latestPlan={plansByReport[getSelectedResumeReport(job)!.id]?.[0]}
                         planning={planningReportId === getSelectedResumeReport(job)!.id}
+                        exporting={exportingReportId === getSelectedResumeReport(job)!.id}
                         onCreatePlan={() => createImprovementPlan(getSelectedResumeReport(job)!)}
+                        onViewReport={() => navigate(`/career-reports/${getSelectedResumeReport(job)!.id}`)}
+                        onExportReport={() => exportCareerReport(getSelectedResumeReport(job)!)}
                       />
                     ) : (
                       <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
@@ -587,12 +613,18 @@ function MatchReportCard({
   report,
   latestPlan,
   planning,
+  exporting,
   onCreatePlan,
+  onViewReport,
+  onExportReport,
 }: {
   report: JobMatchReport;
   latestPlan?: ResumeImprovementPlan;
   planning: boolean;
+  exporting: boolean;
   onCreatePlan: () => void;
+  onViewReport: () => void;
+  onExportReport: () => void;
 }) {
   return (
     <div className="mt-3 rounded-2xl border border-white/70 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-900/70">
@@ -645,6 +677,26 @@ function MatchReportCard({
         </div>
 
         {latestPlan && <ImprovementPlanCard plan={latestPlan} />}
+
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          <button
+            type="button"
+            onClick={onViewReport}
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:-translate-y-0.5 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+          >
+            <FileText className="h-3.5 w-3.5" />
+            查看综合报告
+          </button>
+          <button
+            type="button"
+            onClick={onExportReport}
+            disabled={exporting}
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-900 bg-slate-900 px-3 py-2 text-xs font-semibold text-white transition hover:-translate-y-0.5 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white dark:bg-white dark:text-slate-900"
+          >
+            {exporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+            导出综合 PDF
+          </button>
+        </div>
       </div>
     </div>
   );

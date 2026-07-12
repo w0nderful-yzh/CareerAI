@@ -15,6 +15,7 @@ import com.itextpdf.layout.properties.TextAlignment;
 import com.itextpdf.layout.properties.UnitValue;
 import com.yzh666.careerai.common.exception.BusinessException;
 import com.yzh666.careerai.common.exception.ErrorCode;
+import com.yzh666.careerai.modules.careerreport.dto.CareerReportDTO;
 import com.yzh666.careerai.modules.interview.model.InterviewAnswerEntity;
 import com.yzh666.careerai.modules.interview.model.InterviewSessionEntity;
 import com.yzh666.careerai.modules.interview.model.ResumeAnalysisResponse;
@@ -159,6 +160,104 @@ public class PdfExportService {
         document.close();
         return baos.toByteArray();
     }
+
+    /**
+     * 导出求职综合报告为PDF
+     */
+    public byte[] exportCareerReport(CareerReportDTO report) {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        PdfWriter writer = new PdfWriter(baos);
+        PdfDocument pdfDoc = new PdfDocument(writer);
+        Document document = new Document(pdfDoc);
+
+        PdfFont font = createChineseFont();
+        document.setFont(font);
+
+        Paragraph title = new Paragraph("CareerAI 求职综合报告")
+            .setFontSize(24)
+            .setBold()
+            .setTextAlignment(TextAlignment.CENTER)
+            .setFontColor(HEADER_COLOR);
+        document.add(title);
+
+        document.add(new Paragraph("\n"));
+        document.add(createSectionTitle("目标岗位"));
+        document.add(new Paragraph("岗位: " + sanitizeText(report.job().title())));
+        document.add(new Paragraph("公司: " + sanitizeText(defaultText(report.job().company(), "未填写"))));
+        document.add(new Paragraph("地点: " + sanitizeText(defaultText(report.job().location(), "未填写"))));
+        document.add(new Paragraph("简历: " + sanitizeText(report.resume().filename())));
+
+        document.add(new Paragraph("\n"));
+        document.add(createSectionTitle("简历-岗位匹配"));
+        Table scoreTable = new Table(UnitValue.createPercentArray(new float[]{2, 1}))
+            .useAllAvailableWidth();
+        addScoreRow(scoreTable, "总体匹配度", report.match().overallScore(), 100);
+        addScoreRow(scoreTable, "技能匹配", report.match().skillScore(), 100);
+        addScoreRow(scoreTable, "项目支撑", report.match().projectScore(), 100);
+        addScoreRow(scoreTable, "关键词覆盖", report.match().keywordScore(), 100);
+        document.add(scoreTable);
+        document.add(new Paragraph("匹配结论: " + sanitizeText(report.match().summary())));
+        addList(document, "匹配亮点", report.match().matchedHighlights());
+        addList(document, "主要差距", report.match().gaps());
+        addList(document, "优先行动", report.match().actionItems());
+
+        if (report.latestInterview() != null) {
+            document.add(new Paragraph("\n"));
+            document.add(createSectionTitle("岗位模拟面试复盘"));
+            if (report.latestInterview().overallScore() != null) {
+                Paragraph score = new Paragraph("面试得分: " + report.latestInterview().overallScore() + " / 100")
+                    .setFontSize(16)
+                    .setBold()
+                    .setFontColor(getScoreColor(report.latestInterview().overallScore()));
+                document.add(score);
+            }
+            document.add(new Paragraph("总体反馈: " + sanitizeText(defaultText(report.latestInterview().overallFeedback(), "暂无"))));
+            var jobEvaluation = report.latestInterview().jobEvaluation();
+            if (jobEvaluation != null) {
+                document.add(new Paragraph("岗位结论: " + sanitizeText(defaultText(jobEvaluation.conclusion(), "暂无"))));
+                document.add(new Paragraph("JD覆盖: " + jobEvaluation.jdCoverageScore() + " / 100")
+                    .setFontColor(getScoreColor(jobEvaluation.jdCoverageScore())));
+                addList(document, "已覆盖能力", jobEvaluation.jdCoverage());
+                addList(document, "暴露短板", jobEvaluation.exposedGaps());
+                addList(document, "简历表达建议", jobEvaluation.resumeRewriteSuggestions());
+                addList(document, "下一步行动", jobEvaluation.nextActions());
+            }
+        } else {
+            document.add(new Paragraph("\n"));
+            document.add(createSectionTitle("岗位模拟面试复盘"));
+            document.add(new Paragraph("暂无岗位模拟面试复盘。完成一次岗位面试后，报告会自动补充这一部分。"));
+        }
+
+        if (report.improvementPlan() != null) {
+            document.add(new Paragraph("\n"));
+            document.add(createSectionTitle("简历改进计划"));
+            Paragraph readiness = new Paragraph("准备度: " + report.improvementPlan().readinessScore() + " / 100")
+                .setFontSize(16)
+                .setBold()
+                .setFontColor(getScoreColor(report.improvementPlan().readinessScore()));
+            document.add(readiness);
+            document.add(new Paragraph("计划摘要: " + sanitizeText(report.improvementPlan().summary())));
+            addList(document, "优先修改", report.improvementPlan().priorityFixes());
+            addList(document, "可写入简历的表达", report.improvementPlan().resumeRewriteBullets());
+            addList(document, "项目补强", report.improvementPlan().projectUpgradeTasks());
+            addList(document, "面试练习", report.improvementPlan().interviewPracticeTasks());
+            addList(document, "学习任务", report.improvementPlan().learningTasks());
+        } else {
+            document.add(new Paragraph("\n"));
+            document.add(createSectionTitle("简历改进计划"));
+            document.add(new Paragraph("暂无简历改进计划。请先在岗位中心生成计划。"));
+        }
+
+        document.add(new Paragraph("\n"));
+        document.add(createSectionTitle("建议使用方式"));
+        document.add(new Paragraph("1. 先按优先修改清单更新简历。"));
+        document.add(new Paragraph("2. 将可写入简历的表达改成自己的真实经历和数据。"));
+        document.add(new Paragraph("3. 完成项目补强后重新生成匹配报告。"));
+        document.add(new Paragraph("4. 再做一次岗位模拟面试，比较复盘结果变化。"));
+
+        document.close();
+        return baos.toByteArray();
+    }
     
     /**
      * 导出面试报告为PDF
@@ -290,6 +389,20 @@ public class PdfExportService {
         table.addCell(new Cell().add(new Paragraph(dimension)));
         table.addCell(new Cell().add(new Paragraph(score + " / " + maxScore)
             .setFontColor(getScoreColor(score * 100 / maxScore))));
+    }
+
+    private void addList(Document document, String title, List<String> items) {
+        if (items == null || items.isEmpty()) {
+            return;
+        }
+        document.add(new Paragraph(title).setBold().setMarginTop(8));
+        for (String item : items) {
+            document.add(new Paragraph("• " + sanitizeText(item)));
+        }
+    }
+
+    private String defaultText(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value;
     }
     
     private DeviceRgb getScoreColor(int score) {
