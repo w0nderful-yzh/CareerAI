@@ -261,7 +261,7 @@ pnpm dev
 ```
 
 默认访问地址：前端 `http://localhost:5173`，主应用 Swagger UI `http://localhost:8080/swagger-ui.html`，API 网关 `http://localhost:8090`。
-前端开发代理默认直连主应用 `http://localhost:8080`，方便只启动 `careerai-app` 时登录和调试。需要验证网关路由时，设置 `VITE_API_PROXY_TARGET=http://localhost:8090` 并同时启动 `gateway-service`、`careerai-app`、`knowledge-service` 和 Nacos。
+前端开发代理默认走 API 网关 `http://localhost:8090`，需要同时启动 `gateway-service`、`careerai-app`、`knowledge-service` 和 Nacos。若临时只启动主应用调试，可设置 `VITE_API_PROXY_TARGET=http://localhost:8080` 直连 `careerai-app`。
 
 ## 开发顺序建议
 
