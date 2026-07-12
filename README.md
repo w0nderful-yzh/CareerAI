@@ -237,13 +237,20 @@ NACOS_NAMESPACE=
 NACOS_GROUP=DEFAULT_GROUP
 ```
 
-网关通过 Nacos 服务发现路由：
+服务仍默认注册到 Nacos。为了避免本地单机开发时网关通过机器局域网 IP 复用失效连接，网关路由默认直连本地端口：
 
 | 路径 | 转发目标 |
 | --- | --- |
-| `/api/knowledgebase/**` | `lb://knowledge-service` |
-| `/api/rag-chat/**` | `lb://knowledge-service` |
-| 其它 `/api/**` | `lb://careerai-app` |
+| `/api/knowledgebase/**` | `http://localhost:8081` |
+| `/api/rag-chat/**` | `http://localhost:8081` |
+| 其它 `/api/**` | `http://localhost:8080` |
+
+如需验证 Nacos 负载均衡路由，可在启动 `gateway-service` 前设置：
+
+```env
+GATEWAY_APP_ROUTE_URI=lb://careerai-app
+GATEWAY_KNOWLEDGE_ROUTE_URI=lb://knowledge-service
+```
 
 主应用通过 OpenFeign 调用知识库服务：
 

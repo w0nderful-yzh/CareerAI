@@ -31,11 +31,11 @@ spring:
         webmvc:
           routes:
             - id: knowledge-service
-              uri: lb://knowledge-service
+              uri: ${GATEWAY_KNOWLEDGE_ROUTE_URI:http://localhost:8081}
               predicates:
                 - Path=/api/knowledgebase/**,/api/rag-chat/**
             - id: careerai-app
-              uri: lb://careerai-app
+              uri: ${GATEWAY_APP_ROUTE_URI:http://localhost:8080}
               predicates:
                 - Path=/api/**,/actuator/**,/swagger-ui/**,/v3/api-docs/**
               filters:
