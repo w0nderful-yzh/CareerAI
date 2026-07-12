@@ -178,7 +178,7 @@
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-maven-plugin</artifactId>
         <configuration>
-          <mainClass>com.yzh666.careerai.CareerAiApplication</mainClass>
+          <mainClass>com.yzh666.careerai.UserServiceApplication</mainClass>
         </configuration>
       </plugin>
     </plugins>

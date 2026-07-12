@@ -13,8 +13,8 @@ import org.springframework.cloud.openfeign.EnableFeignClients;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
- * CareerAI - Main Application
- * 智能AI面试官平台 - 主启动类
+ * CareerAI - Resume Service
+ * 智能求职助手 - 简历服务启动类
  */
 @EnableScheduling
 @EnableDiscoveryClient
@@ -27,9 +27,9 @@ import org.springframework.scheduling.annotation.EnableScheduling;
     OpenAiImageAutoConfiguration.class,
     OpenAiModerationAutoConfiguration.class
 })
-public class CareerAiApplication {
+public class ResumeServiceApplication {
 
     public static void main(String[] args) {
-        SpringApplication.run(CareerAiApplication.class, args);
+        SpringApplication.run(ResumeServiceApplication.class, args);
     }
 }
