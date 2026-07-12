@@ -36,6 +36,31 @@ CREATE INDEX IF NOT EXISTS idx_interview_session_user_created ON interview_sessi
 ALTER TABLE interview_sessions ADD COLUMN IF NOT EXISTS job_id bigint;
 ALTER TABLE interview_sessions ADD COLUMN IF NOT EXISTS match_report_id bigint;
 ALTER TABLE interview_sessions ADD COLUMN IF NOT EXISTS job_evaluation_json text;
+
+CREATE TABLE IF NOT EXISTS resume_improvement_plans (
+    id bigserial PRIMARY KEY,
+    user_id bigint NOT NULL,
+    match_report_id bigint NOT NULL,
+    resume_id bigint NOT NULL,
+    resume_filename varchar(255) NOT NULL,
+    job_id bigint NOT NULL,
+    job_title varchar(160) NOT NULL,
+    readiness_score integer NOT NULL,
+    summary text NOT NULL,
+    priority_fixes_json text,
+    resume_rewrite_bullets_json text,
+    project_upgrade_tasks_json text,
+    interview_practice_tasks_json text,
+    learning_tasks_json text,
+    created_at timestamp NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_resume_plan_user_created
+    ON resume_improvement_plans (user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_resume_plan_user_report_created
+    ON resume_improvement_plans (user_id, match_report_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_resume_plan_user_job_created
+    ON resume_improvement_plans (user_id, job_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_interview_session_user_job_created ON interview_sessions (user_id, job_id, created_at);
 
 ALTER TABLE knowledge_bases ADD COLUMN IF NOT EXISTS user_id bigint;

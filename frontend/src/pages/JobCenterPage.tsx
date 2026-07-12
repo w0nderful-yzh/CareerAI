@@ -21,6 +21,10 @@ import { getErrorMessage } from '../api/request';
 import { historyApi, type ResumeListItem } from '../api/history';
 import { jobApi, type JobItem, type JobStatus } from '../api/jobs';
 import { jobMatchApi, type JobMatchReport } from '../api/jobMatches';
+import {
+  resumeImprovementPlanApi,
+  type ResumeImprovementPlan,
+} from '../api/resumeImprovementPlans';
 import type { CategoryDTO } from '../api/skill';
 import { CUSTOM_SKILL_ID } from '../hooks/useInterviewConfig';
 
@@ -55,11 +59,13 @@ export default function JobCenterPage() {
   const [resumes, setResumes] = useState<ResumeListItem[]>([]);
   const [reportsByJob, setReportsByJob] = useState<Record<number, JobMatchReport[]>>({});
   const [interviewsByJob, setInterviewsByJob] = useState<Record<number, TextSessionMeta[]>>({});
+  const [plansByReport, setPlansByReport] = useState<Record<number, ResumeImprovementPlan[]>>({});
   const [selectedResumeIds, setSelectedResumeIds] = useState<Record<number, string>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [parsing, setParsing] = useState(false);
   const [matchingJobId, setMatchingJobId] = useState<number | null>(null);
+  const [planningReportId, setPlanningReportId] = useState<number | null>(null);
   const [error, setError] = useState('');
 
   const [title, setTitle] = useState('');
@@ -77,16 +83,18 @@ export default function JobCenterPage() {
   const loadJobs = async () => {
     setLoading(true);
     try {
-      const [jobList, resumeList, reportList, interviewList] = await Promise.all([
+      const [jobList, resumeList, reportList, interviewList, planList] = await Promise.all([
         jobApi.list(),
         historyApi.getResumes(),
         jobMatchApi.list(),
         interviewApi.listSessions(),
+        resumeImprovementPlanApi.list(),
       ]);
       setJobs(jobList);
       setResumes(resumeList);
       setReportsByJob(groupReportsByJob(reportList));
       setInterviewsByJob(groupInterviewsByJob(interviewList));
+      setPlansByReport(groupPlansByReport(planList));
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -202,6 +210,24 @@ export default function JobCenterPage() {
       setError(getErrorMessage(err));
     } finally {
       setMatchingJobId(null);
+    }
+  };
+
+  const createImprovementPlan = async (report: JobMatchReport) => {
+    setPlanningReportId(report.id);
+    setError('');
+    try {
+      const plan = await resumeImprovementPlanApi.create({
+        matchReportId: report.id,
+      });
+      setPlansByReport(prev => ({
+        ...prev,
+        [report.id]: [plan, ...(prev[report.id] ?? []).filter(item => item.id !== plan.id)],
+      }));
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setPlanningReportId(null);
     }
   };
 
@@ -453,7 +479,12 @@ export default function JobCenterPage() {
                       </button>
                     </div>
                     {getSelectedResumeReport(job) ? (
-                      <MatchReportCard report={getSelectedResumeReport(job)!} />
+                      <MatchReportCard
+                        report={getSelectedResumeReport(job)!}
+                        latestPlan={plansByReport[getSelectedResumeReport(job)!.id]?.[0]}
+                        planning={planningReportId === getSelectedResumeReport(job)!.id}
+                        onCreatePlan={() => createImprovementPlan(getSelectedResumeReport(job)!)}
+                      />
                     ) : (
                       <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
                         选择一份简历，生成它和当前 JD 的匹配度、短板和改进清单。
@@ -511,6 +542,13 @@ function groupInterviewsByJob(interviews: TextSessionMeta[]) {
   }, {});
 }
 
+function groupPlansByReport(plans: ResumeImprovementPlan[]) {
+  return plans.reduce<Record<number, ResumeImprovementPlan[]>>((acc, plan) => {
+    acc[plan.matchReportId] = [...(acc[plan.matchReportId] ?? []), plan];
+    return acc;
+  }, {});
+}
+
 function LatestInterviewCard({
   interview,
   onView,
@@ -545,7 +583,17 @@ function LatestInterviewCard({
   );
 }
 
-function MatchReportCard({ report }: { report: JobMatchReport }) {
+function MatchReportCard({
+  report,
+  latestPlan,
+  planning,
+  onCreatePlan,
+}: {
+  report: JobMatchReport;
+  latestPlan?: ResumeImprovementPlan;
+  planning: boolean;
+  onCreatePlan: () => void;
+}) {
   return (
     <div className="mt-3 rounded-2xl border border-white/70 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-900/70">
       <div className="flex items-start justify-between gap-3">
@@ -575,6 +623,77 @@ function MatchReportCard({ report }: { report: JobMatchReport }) {
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <ReportList title="匹配亮点" items={report.matchedHighlights} tone="good" />
         <ReportList title="优先补强" items={report.actionItems.length > 0 ? report.actionItems : report.gaps} tone="todo" />
+      </div>
+
+      <div className="mt-4 rounded-2xl border border-amber-100 bg-amber-50/70 p-3 dark:border-amber-900/40 dark:bg-amber-900/10">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-xs font-black text-amber-700 dark:text-amber-300">简历改进计划</p>
+            <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">
+              汇总匹配报告和最近一次岗位面试复盘，生成可直接改简历的行动清单。
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onCreatePlan}
+            disabled={planning}
+            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-xs font-semibold text-white transition hover:-translate-y-0.5 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-slate-900"
+          >
+            {planning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+            {latestPlan ? '更新计划' : '生成计划'}
+          </button>
+        </div>
+
+        {latestPlan && <ImprovementPlanCard plan={latestPlan} />}
+      </div>
+    </div>
+  );
+}
+
+function ImprovementPlanCard({ plan }: { plan: ResumeImprovementPlan }) {
+  return (
+    <div className="mt-3 rounded-2xl border border-white/80 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-900/70">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-bold text-slate-900 dark:text-white">
+            准备度 {plan.readinessScore} 分
+          </p>
+          <p className="mt-1 text-xs leading-5 text-slate-600 dark:text-slate-300">
+            {plan.summary}
+          </p>
+        </div>
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 text-sm font-black text-white shadow-sm">
+          {plan.readinessScore}
+        </div>
+      </div>
+
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <PlanList title="优先修改" items={plan.priorityFixes} />
+        <PlanList title="简历文案" items={plan.resumeRewriteBullets} />
+        <PlanList title="项目补强" items={plan.projectUpgradeTasks} />
+        <PlanList title="面试练习" items={plan.interviewPracticeTasks} />
+      </div>
+
+      {plan.learningTasks.length > 0 && (
+        <div className="mt-3">
+          <PlanList title="学习任务" items={plan.learningTasks} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PlanList({ title, items }: { title: string; items: string[] }) {
+  return (
+    <div>
+      <p className="mb-1.5 text-[11px] font-bold text-slate-500 dark:text-slate-400">{title}</p>
+      <div className="space-y-1.5">
+        {(items.length > 0 ? items.slice(0, 4) : ['暂无条目，请重新生成计划。']).map(item => (
+          <div key={item} className="flex items-start gap-1.5 text-[11px] leading-4 text-slate-600 dark:text-slate-300">
+            <CheckCircle2 className="mt-0.5 h-3 w-3 shrink-0 text-amber-500" />
+            <span>{item}</span>
+          </div>
+        ))}
       </div>
     </div>
   );

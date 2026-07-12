@@ -70,6 +70,8 @@ public enum ErrorCode {
     JOB_PARSE_FAILED(9502, "岗位 JD 解析失败"),
     JOB_MATCH_NOT_FOUND(9601, "匹配报告不存在"),
     JOB_MATCH_FAILED(9602, "简历岗位匹配失败"),
+    RESUME_PLAN_NOT_FOUND(9701, "简历改进计划不存在"),
+    RESUME_PLAN_FAILED(9702, "简历改进计划生成失败"),
 
     // ========== 语音面试模块错误 10xxx ==========
     VOICE_SESSION_NOT_FOUND(10001, "语音面试会话不存在"),
