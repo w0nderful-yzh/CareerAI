@@ -151,6 +151,9 @@ CareerAI/
 ├── frontend/                         # React + TypeScript + Vite
 ├── backend/
 │   ├── pom.xml                       # Maven 父工程
+│   ├── gateway-service/              # API 网关，按路径路由到主应用和知识库服务
+│   │   ├── pom.xml
+│   │   └── src/
 │   ├── careerai-app/                 # 当前主应用，保留完整业务闭环
 │   │   ├── pom.xml
 │   │   └── src/
@@ -167,7 +170,7 @@ CareerAI/
 └── README.md
 ```
 
-后续会继续在 `backend/` 下增加 Gateway、用户、简历、岗位、面试和 AI 服务模块，并逐步把已拆出的能力从 `careerai-app` 迁移到独立服务调用。
+后续会继续在 `backend/` 下增加用户、简历、岗位、面试和 AI 服务模块，并逐步把已拆出的能力从 `careerai-app` 迁移到独立服务调用。
 
 ## 本地开发
 
@@ -204,7 +207,22 @@ cd backend
 mvn -pl knowledge-service spring-boot:run
 ```
 
-默认端口：主应用 `8080`，知识库服务 `8081`。当前阶段两个服务仍连接同一套本地 PostgreSQL、Redis 和 RustFS，中间件仍直接使用本地 Docker 容器，不使用 Docker Compose。
+启动网关：
+
+```bash
+cd backend
+mvn -pl gateway-service spring-boot:run
+```
+
+默认端口：主应用 `8080`，知识库服务 `8081`，网关 `8090`。当前阶段服务仍连接同一套本地 PostgreSQL、Redis 和 RustFS，中间件仍直接使用本地 Docker 容器，不使用 Docker Compose。
+
+网关第一阶段使用静态路由：
+
+| 路径 | 转发目标 |
+| --- | --- |
+| `/api/knowledgebase/**` | `knowledge-service` |
+| `/api/rag-chat/**` | `knowledge-service` |
+| 其它 `/api/**` | `careerai-app` |
 
 启动前端：
 
@@ -215,7 +233,8 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-默认访问地址：前端 `http://localhost:5173`，后端 `http://localhost:8080`，Swagger UI `http://localhost:8080/swagger-ui.html`。
+默认访问地址：前端 `http://localhost:5173`，API 网关 `http://localhost:8090`，主应用 Swagger UI `http://localhost:8080/swagger-ui.html`。
+前端开发代理默认指向网关 `http://localhost:8090`。如需临时绕过网关，可设置 `VITE_API_PROXY_TARGET=http://localhost:8080`。
 
 ## 开发顺序建议
 

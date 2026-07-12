@@ -1,0 +1,36 @@
+logging:
+  charset:
+    console: UTF-8
+    file: UTF-8
+
+server:
+  port: ${GATEWAY_SERVICE_PORT:8090}
+
+spring:
+  config:
+    import:
+      - optional:file:.env[.properties]
+      - optional:file:../.env[.properties]
+      - optional:file:../../.env[.properties]
+  application:
+    name: gateway-service
+  cloud:
+    compatibility-verifier:
+      enabled: false
+    gateway:
+      mvc:
+        routes:
+          - id: knowledge-service
+            uri: ${CAREERAI_KNOWLEDGE_SERVICE_URL:http://localhost:8081}
+            predicates:
+              - Path=/api/knowledgebase/**,/api/rag-chat/**
+          - id: careerai-app
+            uri: ${CAREERAI_APP_URL:http://localhost:8080}
+            predicates:
+              - Path=/api/**,/actuator/**,/swagger-ui/**,/v3/api-docs/**
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus

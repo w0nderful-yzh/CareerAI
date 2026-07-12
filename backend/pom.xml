@@ -21,6 +21,7 @@
   <modules>
     <module>careerai-app</module>
     <module>knowledge-service</module>
+    <module>gateway-service</module>
   </modules>
 
   <properties>
@@ -41,6 +42,7 @@
     <springdoc.version>3.0.2</springdoc.version>
     <dashscope.version>2.22.7</dashscope.version>
     <victools.version>5.0.0</victools.version>
+    <spring-cloud-gateway.version>5.0.0</spring-cloud-gateway.version>
   </properties>
 
   <dependencyManagement>
