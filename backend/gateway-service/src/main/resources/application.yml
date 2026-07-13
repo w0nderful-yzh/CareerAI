@@ -1,0 +1,46 @@
+logging:
+  charset:
+    console: UTF-8
+    file: UTF-8
+
+server:
+  port: ${GATEWAY_SERVICE_PORT:8090}
+
+spring:
+  config:
+    import:
+      - optional:file:.env[.properties]
+      - optional:file:../.env[.properties]
+      - optional:file:../../.env[.properties]
+  application:
+    name: gateway-service
+  cloud:
+    compatibility-verifier:
+      enabled: false
+    nacos:
+      discovery:
+        enabled: ${NACOS_DISCOVERY_ENABLED:true}
+        register-enabled: ${NACOS_REGISTER_ENABLED:true}
+        server-addr: ${NACOS_SERVER_ADDR:localhost:8848}
+        namespace: ${NACOS_NAMESPACE:}
+        group: ${NACOS_GROUP:DEFAULT_GROUP}
+        username: ${NACOS_USERNAME:}
+        password: ${NACOS_PASSWORD:}
+    gateway:
+      server:
+        webmvc:
+          routes:
+            - id: knowledge-service
+              uri: ${GATEWAY_KNOWLEDGE_ROUTE_URI:http://localhost:8081}
+              predicates:
+                - Path=/api/knowledgebase/**,/api/rag-chat/**
+            - id: careerai-app
+              uri: ${GATEWAY_APP_ROUTE_URI:http://localhost:8080}
+              predicates:
+                - Path=/api/**,/actuator/**,/swagger-ui/**,/v3/api-docs/**
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
