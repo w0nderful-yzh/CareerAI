@@ -29,8 +29,10 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
@@ -49,6 +51,8 @@ public class InterviewQuestionService {
 
     private static final String DEFAULT_QUESTION_TYPE = "GENERAL";
     private static final int MAX_FOLLOW_UP_COUNT = 2;
+    private static final int OPENING_QUESTION_CANDIDATE_COUNT = 3;
+    private static final double TOPIC_REPEAT_SIMILARITY = 0.42;
     private static final double RESUME_QUESTION_RATIO = 0.6;
 
     private static final String GENERIC_MODE_SYSTEM_APPEND = """
@@ -198,6 +202,137 @@ public class InterviewQuestionService {
         log.info("并行出题成功: 简历题={}, 方向题={}, 合计={}",
             resumeQuestions.size(), directionQuestions.size(), merged.size());
         return merged;
+    }
+
+    /**
+     * 为 Agent 会话生成首题候选，并在 Java 侧执行跨会话去重。
+     *
+     * <p>首题只生成一个候选时，模型即使看到了历史题目，也可能继续选择简历中最显眼的项目亮点。
+     * 这里一次生成少量候选，再优先选择没有考过的主题；当候选全部属于历史主题时仍允许回退，
+     * 以支持用户主动发起的专项复测。</p>
+     */
+    public InterviewQuestionDTO generateOpeningQuestion(
+            String llmProvider,
+            String skillId,
+            String difficulty,
+            String resumeText,
+            List<HistoricalQuestion> historicalQuestions,
+            List<CategoryDTO> customCategories,
+            String jdText,
+            String jobMatchContext,
+            InterviewBlueprintDTO blueprint) {
+        SkillDTO skill = resolveSkill(skillId, customCategories, jdText);
+        String difficultyDesc = resolveDifficulty(difficulty);
+        ChatClient questionChatClient = llmProviderRegistry.getPlainChatClient(llmProvider);
+        String historicalSection = buildHistoricalSection(historicalQuestions);
+        String blueprintSection = buildBlueprintSection(blueprint);
+
+        // 首题候选不会直接保存追问，关闭追问生成可以减少无效 token 消耗。
+        List<InterviewQuestionDTO> candidates = resumeText != null && !resumeText.isBlank()
+            ? generateResumeQuestions(
+                questionChatClient,
+                resumeText,
+                OPENING_QUESTION_CANDIDATE_COUNT,
+                skill,
+                difficultyDesc,
+                historicalSection,
+                jobMatchContext,
+                blueprintSection,
+                0)
+            : generateDirectionOnly(
+                questionChatClient,
+                skill,
+                difficultyDesc,
+                OPENING_QUESTION_CANDIDATE_COUNT,
+                historicalSection,
+                jobMatchContext,
+                blueprintSection,
+                0);
+        return selectFirstNovelMainQuestion(candidates, historicalQuestions);
+    }
+
+    static InterviewQuestionDTO selectFirstNovelMainQuestion(
+            List<InterviewQuestionDTO> candidates,
+            List<HistoricalQuestion> historicalQuestions) {
+        List<InterviewQuestionDTO> mainQuestions = candidates == null ? List.of() : candidates.stream()
+            .filter(question -> question != null && !question.isFollowUp())
+            .toList();
+        if (mainQuestions.isEmpty()) {
+            throw new BusinessException(
+                ErrorCode.INTERVIEW_QUESTION_GENERATION_FAILED,
+                "首题生成失败");
+        }
+
+        InterviewQuestionDTO selected = mainQuestions.stream()
+            .filter(question -> !isHistoricalRepeat(question, historicalQuestions))
+            .findFirst()
+            .orElse(mainQuestions.getFirst());
+        if (selected != mainQuestions.getFirst()) {
+            log.info("首题候选去重生效: 跳过主题={}, 选中主题={}",
+                displayTopic(mainQuestions.getFirst()), displayTopic(selected));
+        } else if (isHistoricalRepeat(selected, historicalQuestions)) {
+            log.info("首题候选均为历史主题，使用最先生成的候选避免会话创建失败: topic={}",
+                displayTopic(selected));
+        }
+        return selected;
+    }
+
+    private static boolean isHistoricalRepeat(
+            InterviewQuestionDTO candidate,
+            List<HistoricalQuestion> historicalQuestions) {
+        if (historicalQuestions == null || historicalQuestions.isEmpty()) {
+            return false;
+        }
+        String candidateQuestion = normalizeForComparison(candidate.question());
+        String candidateTopic = normalizeForComparison(candidate.topicSummary());
+        return historicalQuestions.stream().anyMatch(history -> {
+            String historicalQuestion = normalizeForComparison(history.question());
+            if (!candidateQuestion.isEmpty() && candidateQuestion.equals(historicalQuestion)) {
+                return true;
+            }
+            String historicalTopic = normalizeForComparison(history.topicSummary());
+            return !candidateTopic.isEmpty()
+                && !historicalTopic.isEmpty()
+                && bigramDice(candidateTopic, historicalTopic) >= TOPIC_REPEAT_SIMILARITY;
+        });
+    }
+
+    private static double bigramDice(String left, String right) {
+        if (left.equals(right)) {
+            return 1.0;
+        }
+        Set<String> leftBigrams = bigrams(left);
+        Set<String> rightBigrams = bigrams(right);
+        if (leftBigrams.isEmpty() || rightBigrams.isEmpty()) {
+            return 0.0;
+        }
+        long intersection = leftBigrams.stream().filter(rightBigrams::contains).count();
+        return (2.0 * intersection) / (leftBigrams.size() + rightBigrams.size());
+    }
+
+    private static Set<String> bigrams(String value) {
+        Set<String> result = new LinkedHashSet<>();
+        for (int index = 0; index < value.length() - 1; index++) {
+            result.add(value.substring(index, index + 2));
+        }
+        return result;
+    }
+
+    private static String normalizeForComparison(String value) {
+        if (value == null || value.isBlank()) {
+            return "";
+        }
+        StringBuilder normalized = new StringBuilder(value.length());
+        value.toLowerCase().codePoints()
+            .filter(Character::isLetterOrDigit)
+            .forEach(normalized::appendCodePoint);
+        return normalized.toString();
+    }
+
+    private static String displayTopic(InterviewQuestionDTO question) {
+        return question.topicSummary() == null || question.topicSummary().isBlank()
+            ? question.question()
+            : question.topicSummary();
     }
 
     /**

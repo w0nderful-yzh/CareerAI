@@ -129,26 +129,20 @@ public class InterviewSessionService {
             request.resumeId()
         );
 
-        // Agent 会话只预生成首题，后续每轮都根据真实回答增量出题。
-        int initialQuestionCount = agentCreationKey == null ? request.questionCount() : 1;
-        List<InterviewQuestionDTO> questions = questionService.generateQuestionsBySkill(
-            request.llmProvider(),
-            skillId,
-            difficulty,
-            request.resumeText(),
-            initialQuestionCount,
-            historicalQuestions,
-            request.customCategories(),
-            request.jdText(),
-            jobMatchContext,
-            blueprint
-        );
+        // Agent 会话只保存首题，后续每轮都根据真实回答增量出题。
+        List<InterviewQuestionDTO> questions;
         if (agentCreationKey != null) {
-            InterviewQuestionDTO first = questions.stream()
-                .filter(question -> !question.isFollowUp())
-                .findFirst()
-                .orElseThrow(() -> new BusinessException(
-                    ErrorCode.INTERVIEW_QUESTION_GENERATION_FAILED, "首题生成失败"));
+            InterviewQuestionDTO first = questionService.generateOpeningQuestion(
+                request.llmProvider(),
+                skillId,
+                difficulty,
+                request.resumeText(),
+                historicalQuestions,
+                request.customCategories(),
+                request.jdText(),
+                jobMatchContext,
+                blueprint
+            );
             questions = List.of(InterviewQuestionDTO.create(
                 0,
                 first.question(),
@@ -158,6 +152,19 @@ public class InterviewSessionService {
                 false,
                 null,
                 first.requirementId()));
+        } else {
+            questions = questionService.generateQuestionsBySkill(
+                request.llmProvider(),
+                skillId,
+                difficulty,
+                request.resumeText(),
+                request.questionCount(),
+                historicalQuestions,
+                request.customCategories(),
+                request.jdText(),
+                jobMatchContext,
+                blueprint
+            );
         }
         int totalQuestions = agentCreationKey == null ? questions.size() : blueprint.questionCount();
 

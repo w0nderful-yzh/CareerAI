@@ -16,6 +16,7 @@ import com.yzh666.careerai.common.exception.BusinessException;
 import com.yzh666.careerai.infrastructure.redis.InterviewSessionCache;
 import com.yzh666.careerai.infrastructure.redis.InterviewSessionCache.CachedSession;
 import com.yzh666.careerai.modules.interview.listener.EvaluateStreamProducer;
+import com.yzh666.careerai.modules.interview.model.CreateInterviewRequest;
 import com.yzh666.careerai.modules.interview.model.InterviewQuestionDTO;
 import com.yzh666.careerai.modules.interview.model.InterviewBlueprintDTO;
 import com.yzh666.careerai.modules.interview.model.InterviewSessionEntity.CompletionType;
@@ -122,6 +123,47 @@ class InterviewSessionServiceAdaptiveTest {
         "FOLLOW_UP",
         "基础方案正确，需要继续验证一致性处理。"
     );
+  }
+
+  @Test
+  void agentSessionUsesDeduplicatedOpeningQuestionGenerator() {
+    when(persistenceService.findByAgentCreationKey("agent:create:opening"))
+        .thenReturn(Optional.empty());
+    when(persistenceService.getHistoricalQuestions("java-backend", 11L))
+        .thenReturn(List.of());
+    when(jobMatchService.buildInterviewContext(null, null, 11L)).thenReturn("");
+    when(questionService.generateOpeningQuestion(
+        any(), any(), any(), any(), any(), any(), any(), any(), any()))
+        .thenReturn(InterviewQuestionDTO.create(
+            7,
+            "Redis ZSet 的滚动分页如何避免重复数据？",
+            "REDIS",
+            "项目经历",
+            "Redis ZSet 滚动分页设计",
+            false,
+            null));
+
+    var result = service.createSessionIdempotently(new CreateInterviewRequest(
+        "候选人有 Redis 项目经验",
+        4,
+        11L,
+        true,
+        "dashscope",
+        "java-backend",
+        "mid",
+        List.of(),
+        null,
+        null,
+        null,
+        blueprint()
+    ), "agent:create:opening");
+
+    assertEquals(4, result.totalQuestions());
+    assertEquals(1, result.questions().size());
+    assertEquals(0, result.questions().getFirst().questionIndex());
+    assertEquals("Redis ZSet 滚动分页设计", result.questions().getFirst().topicSummary());
+    verify(questionService).generateOpeningQuestion(
+        any(), any(), any(), any(), any(), any(), any(), any(), any());
   }
 
   @Test

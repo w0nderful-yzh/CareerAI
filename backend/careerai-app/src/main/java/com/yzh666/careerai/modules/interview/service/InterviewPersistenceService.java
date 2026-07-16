@@ -627,25 +627,18 @@ public class InterviewPersistenceService {
     private static final int MAX_HISTORICAL_QUESTIONS = 60;
 
     /**
-     * 获取历史提问列表（结构化，按分类压缩用）。
-     * 有 resumeId 时精确匹配 resumeId + skillId；无 resumeId 时按 skillId 查全部（通用模式兜底）。
+     * 获取当前用户在同一面试方向下的历史提问。
+     *
+     * <p>不能只按 resumeId 查询：用户上传新版简历后数据库 ID 会变化，但已考知识点仍应延续，
+     * 否则最显眼的项目亮点会在每个简历版本里反复成为首题。</p>
      */
     public List<HistoricalQuestion> getHistoricalQuestions(String skillId, Long resumeId) {
-        List<InterviewSessionEntity> sessions;
-        if (resumeId != null) {
-            sessions = sessionRepository.findTop10ByResumeIdAndUserIdAndSkillIdOrderByCreatedAtDesc(
-                resumeId,
-                currentUserService.currentUserId(),
-                skillId
-            );
-        } else {
-            sessions = sessionRepository.findTop10ByUserIdAndSkillIdOrderByCreatedAtDesc(
-                currentUserService.currentUserId(),
-                skillId
-            );
-        }
+        List<InterviewSessionEntity> sessions =
+            sessionRepository.findTop10ByUserIdAndSkillIdOrderByCreatedAtDesc(
+                currentUserService.currentUserId(), skillId);
 
-        log.info("加载历史题目: skillId={}, resumeId={}, 查到 {} 个历史会话", skillId, resumeId, sessions.size());
+        log.info("加载跨简历版本历史题目: skillId={}, currentResumeId={}, 查到 {} 个历史会话",
+            skillId, resumeId, sessions.size());
 
         LinkedHashSet<String> seen = new LinkedHashSet<>();
         List<HistoricalQuestion> result = sessions.stream()
