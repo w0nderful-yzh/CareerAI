@@ -11,7 +11,12 @@ public record InterviewSessionDTO(
     int totalQuestions,
     int currentQuestionIndex,
     List<InterviewQuestionDTO> questions,
-    SessionStatus status
+    SessionStatus status,
+    InterviewBlueprintDTO blueprint,
+    String endReason,
+    String completionType,
+    List<String> coveredTargets,
+    List<String> unverifiedTargets
 ) {
     public enum SessionStatus {
         CREATED,      // 会话已创建

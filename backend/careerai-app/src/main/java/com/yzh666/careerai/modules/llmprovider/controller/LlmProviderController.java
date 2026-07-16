@@ -96,4 +96,11 @@ public class LlmProviderController {
     configService.updateDefaultEmbeddingProvider(request);
     return Result.success();
   }
+
+  @PutMapping("/default-agent-provider")
+  @RateLimit(dimension = RateLimit.Dimension.GLOBAL, count = 5)
+  public Result<Void> updateDefaultAgentProvider(@RequestBody DefaultProviderDTO request) {
+    configService.updateDefaultAgentProvider(request);
+    return Result.success();
+  }
 }

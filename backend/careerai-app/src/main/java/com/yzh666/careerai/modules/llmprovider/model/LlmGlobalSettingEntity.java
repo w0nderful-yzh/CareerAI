@@ -31,6 +31,11 @@ public class LlmGlobalSettingEntity {
   @Column(name = "default_embedding_provider_id", nullable = false, length = 64)
   private String defaultEmbeddingProviderId;
 
+  // Kept nullable during rolling upgrades. The bootstrap service backfills existing rows;
+  // the accompanying SQL migration then adds the database-level NOT NULL constraint.
+  @Column(name = "default_agent_provider_id", length = 64)
+  private String defaultAgentProviderId;
+
   @Column(name = "created_at", nullable = false)
   private LocalDateTime createdAt;
 

@@ -1,5 +1,16 @@
 import request from './request';
 
+export interface PreparationTask {
+  id: string;
+  category: 'RESUME' | 'PROJECT' | 'LEARNING' | 'INTERVIEW';
+  title: string;
+  priority: 'P0' | 'P1' | 'P2';
+  suggestedDays: number;
+  verificationMethod: string;
+  status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'SKIPPED';
+  relatedRequirementIds: string[];
+}
+
 export interface ResumeImprovementPlan {
   id: number;
   matchReportId: number;
@@ -14,6 +25,7 @@ export interface ResumeImprovementPlan {
   projectUpgradeTasks: string[];
   interviewPracticeTasks: string[];
   learningTasks: string[];
+  preparationTasks: PreparationTask[];
   createdAt: string;
 }
 

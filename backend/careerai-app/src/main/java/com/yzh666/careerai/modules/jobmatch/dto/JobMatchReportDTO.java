@@ -17,6 +17,7 @@ public record JobMatchReportDTO(
     List<String> matchedHighlights,
     List<String> gaps,
     List<String> actionItems,
+    List<RequirementEvidenceDTO> evidenceMappings,
     LocalDateTime createdAt
 ) {
 }

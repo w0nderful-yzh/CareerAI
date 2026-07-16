@@ -17,6 +17,7 @@ import com.yzh666.careerai.modules.resume.service.ResumePersistenceService;
 import com.yzh666.careerai.modules.user.service.CurrentUserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -33,6 +34,26 @@ public class JobMatchTaskService {
 
   public JobMatchTaskDTO createTask(CreateJobMatchRequest request) {
     Long userId = currentUserService.currentUserId();
+    return createTask(request, userId, null);
+  }
+
+  public JobMatchTaskDTO createTaskIdempotently(
+      CreateJobMatchRequest request,
+      String idempotencyKey
+  ) {
+    Long userId = currentUserService.currentUserId();
+    return taskRepository.findByUserIdAndTaskTypeAndAgentIdempotencyKey(
+        userId,
+        AiAnalysisTaskType.JOB_MATCH,
+        idempotencyKey
+    ).map(this::toDTO).orElseGet(() -> createTask(request, userId, idempotencyKey));
+  }
+
+  private JobMatchTaskDTO createTask(
+      CreateJobMatchRequest request,
+      Long userId,
+      String idempotencyKey
+  ) {
     resumePersistenceService.findByIdAndUserId(request.resumeId(), userId)
         .orElseThrow(() -> new BusinessException(ErrorCode.RESUME_NOT_FOUND));
     jobRepository.findByIdAndUserId(request.jobId(), userId)
@@ -46,7 +67,22 @@ public class JobMatchTaskService {
     task.setResumeId(request.resumeId());
     task.setJobId(request.jobId());
     task.setRetryCount(0);
-    AiAnalysisTaskEntity saved = taskRepository.save(task);
+    task.setAgentIdempotencyKey(idempotencyKey);
+
+    AiAnalysisTaskEntity saved;
+    try {
+      // 先落库再发消息，唯一约束可阻止同一个 Agent 步骤重复创建任务。
+      saved = taskRepository.saveAndFlush(task);
+    } catch (DataIntegrityViolationException exception) {
+      if (idempotencyKey == null) {
+        throw exception;
+      }
+      return taskRepository.findByUserIdAndTaskTypeAndAgentIdempotencyKey(
+          userId,
+          AiAnalysisTaskType.JOB_MATCH,
+          idempotencyKey
+      ).map(this::toDTO).orElseThrow(() -> exception);
+    }
 
     JobMatchRabbitProducer producer = producerProvider.getIfAvailable();
     if (producer == null) {

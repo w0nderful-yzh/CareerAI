@@ -20,9 +20,16 @@
 ## 简历-岗位匹配上下文
 {jobMatchSection}
 
+## 本轮面试生成蓝图
+{blueprintSection}
+
 ## 输出要求
 - questions 数组必须包含恰好 {questionCount} 个元素，不多不少
 - 每个主问题必须包含 topicSummary 字段：10 字以内的知识点摘要（用于历史去重），格式示例：
   - "Redis 缓存策略设计"
   - "MySQL 索引优化"
   - "Kafka 异步消息解耦"
+- 岗位驱动问题必须填写匹配上下文中真实存在的 requirementId，禁止编造编号
+- 优先覆盖蓝图中的重点岗位要求和强化主题，并按蓝图要求组合题型
+- 不得围绕蓝图中的回避主题出题
+- questions 内的主问题应覆盖不同知识点，topicSummary 不得重复；只有蓝图明确要求单主题强化时才允许从不同角度考察同一主题

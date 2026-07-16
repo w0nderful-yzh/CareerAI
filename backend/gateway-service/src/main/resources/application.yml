@@ -19,8 +19,8 @@ spring:
       enabled: false
     nacos:
       discovery:
-        enabled: ${NACOS_DISCOVERY_ENABLED:true}
-        register-enabled: ${NACOS_REGISTER_ENABLED:true}
+        enabled: ${NACOS_DISCOVERY_ENABLED:false}
+        register-enabled: ${NACOS_REGISTER_ENABLED:false}
         server-addr: ${NACOS_SERVER_ADDR:localhost:8848}
         namespace: ${NACOS_NAMESPACE:}
         group: ${NACOS_GROUP:DEFAULT_GROUP}
@@ -34,6 +34,10 @@ spring:
               uri: ${GATEWAY_KNOWLEDGE_ROUTE_URI:http://localhost:8081}
               predicates:
                 - Path=/api/knowledgebase/**,/api/rag-chat/**
+            - id: agent-service
+              uri: ${GATEWAY_AGENT_ROUTE_URI:http://localhost:8000}
+              predicates:
+                - Path=/api/agent/**
             - id: careerai-app
               uri: ${GATEWAY_APP_ROUTE_URI:http://localhost:8080}
               predicates:

@@ -1,17 +1,16 @@
 package com.yzh666.careerai.modules.interview.controller;
 
-import com.yzh666.careerai.common.annotation.RateLimit;
 import com.yzh666.careerai.common.result.Result;
-import com.yzh666.careerai.modules.interview.model.CreateInterviewRequest;
+import com.yzh666.careerai.modules.interview.model.AbilityProfileItemDTO;
 import com.yzh666.careerai.modules.interview.model.InterviewDetailDTO;
-import com.yzh666.careerai.modules.interview.model.InterviewReportDTO;
+import com.yzh666.careerai.modules.interview.model.InterviewClosureDTO;
 import com.yzh666.careerai.modules.interview.model.InterviewSessionDTO;
 import com.yzh666.careerai.modules.interview.model.SessionListItemDTO;
-import com.yzh666.careerai.modules.interview.model.SubmitAnswerRequest;
-import com.yzh666.careerai.modules.interview.model.SubmitAnswerResponse;
 import com.yzh666.careerai.modules.interview.service.InterviewHistoryService;
 import com.yzh666.careerai.modules.interview.service.InterviewPersistenceService;
 import com.yzh666.careerai.modules.interview.service.InterviewSessionService;
+import com.yzh666.careerai.modules.interview.service.AbilityProfileService;
+import com.yzh666.careerai.modules.interview.service.InterviewClosureService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,16 +20,12 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.Map;
 
 /**
  * 面试控制器
@@ -45,6 +40,20 @@ public class InterviewController {
     private final InterviewSessionService sessionService;
     private final InterviewHistoryService historyService;
     private final InterviewPersistenceService persistenceService;
+    private final AbilityProfileService abilityProfileService;
+    private final InterviewClosureService interviewClosureService;
+
+    /** 读取当前用户跨场次沉淀的能力画像及最新证据。 */
+    @GetMapping("/api/interview/ability-profile")
+    public Result<List<AbilityProfileItemDTO>> getAbilityProfile() {
+        return Result.success(abilityProfileService.getCurrentProfile());
+    }
+
+    /** 查询报告生成后幂等落库的结束总结和改进任务。 */
+    @GetMapping("/api/interview/sessions/{sessionId}/closure")
+    public Result<InterviewClosureDTO> getClosure(@PathVariable String sessionId) {
+        return Result.success(interviewClosureService.getClosure(sessionId));
+    }
     
     /**
      * 列出所有面试会话（用于面试记录页）
@@ -60,92 +69,12 @@ public class InterviewController {
     }
 
     /**
-     * 创建面试会话
-     */
-    @PostMapping("/api/interview/sessions")
-    @RateLimit(dimension = RateLimit.Dimension.GLOBAL, count = 5)
-    @RateLimit(dimension = RateLimit.Dimension.IP, count = 5)
-    public Result<InterviewSessionDTO> createSession(@RequestBody CreateInterviewRequest request) {
-        log.info("创建面试会话，题目数量: {}", request.questionCount());
-        InterviewSessionDTO session = sessionService.createSession(request);
-        return Result.success(session);
-    }
-    
-    /**
      * 获取会话信息
      */
     @GetMapping("/api/interview/sessions/{sessionId}")
     public Result<InterviewSessionDTO> getSession(@PathVariable String sessionId) {
         InterviewSessionDTO session = sessionService.getSession(sessionId);
         return Result.success(session);
-    }
-    
-    /**
-     * 获取当前问题
-     */
-    @GetMapping("/api/interview/sessions/{sessionId}/question")
-    public Result<Map<String, Object>> getCurrentQuestion(@PathVariable String sessionId) {
-        return Result.success(sessionService.getCurrentQuestionResponse(sessionId));
-    }
-    
-    /**
-     * 提交答案
-     */
-    @PostMapping("/api/interview/sessions/{sessionId}/answers")
-    @RateLimit(dimension = RateLimit.Dimension.GLOBAL, count = 10)
-    public Result<SubmitAnswerResponse> submitAnswer(
-            @PathVariable String sessionId,
-            @RequestBody Map<String, Object> body) {
-        Integer questionIndex = (Integer) body.get("questionIndex");
-        String answer = (String) body.get("answer");
-        log.info("提交答案: 会话{}, 问题{}", sessionId, questionIndex);
-        SubmitAnswerRequest request = new SubmitAnswerRequest(sessionId, questionIndex, answer);
-        SubmitAnswerResponse response = sessionService.submitAnswer(request);
-        return Result.success(response);
-    }
-    
-    /**
-     * 生成面试报告
-     */
-    @GetMapping("/api/interview/sessions/{sessionId}/report")
-    public Result<InterviewReportDTO> getReport(@PathVariable String sessionId) {
-        log.info("生成面试报告: {}", sessionId);
-        InterviewReportDTO report = sessionService.generateReport(sessionId);
-        return Result.success(report);
-    }
-    
-    /**
-     * 查找未完成的面试会话
-     * GET /api/interview/sessions/unfinished/{resumeId}
-     */
-    @GetMapping("/api/interview/sessions/unfinished/{resumeId}")
-    public Result<InterviewSessionDTO> findUnfinishedSession(@PathVariable Long resumeId) {
-        return Result.success(sessionService.findUnfinishedSessionOrThrow(resumeId));
-    }
-    
-    /**
-     * 暂存答案（不进入下一题）
-     */
-    @PutMapping("/api/interview/sessions/{sessionId}/answers")
-    public Result<Void> saveAnswer(
-            @PathVariable String sessionId,
-            @RequestBody Map<String, Object> body) {
-        Integer questionIndex = (Integer) body.get("questionIndex");
-        String answer = (String) body.get("answer");
-        log.info("暂存答案: 会话{}, 问题{}", sessionId, questionIndex);
-        SubmitAnswerRequest request = new SubmitAnswerRequest(sessionId, questionIndex, answer);
-        sessionService.saveAnswer(request);
-        return Result.success(null);
-    }
-    
-    /**
-     * 提前交卷
-     */
-    @PostMapping("/api/interview/sessions/{sessionId}/complete")
-    public Result<Void> completeInterview(@PathVariable String sessionId) {
-        log.info("提前交卷: {}", sessionId);
-        sessionService.completeInterview(sessionId);
-        return Result.success(null);
     }
     
     /**

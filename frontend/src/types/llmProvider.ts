@@ -9,6 +9,7 @@ export interface ProviderItem {
   temperature: number | null;
   defaultChatProvider: boolean;
   defaultEmbeddingProvider: boolean;
+  defaultAgentProvider: boolean;
 }
 
 export interface CreateProviderRequest {
@@ -41,4 +42,5 @@ export interface ProviderTestResult {
 export interface DefaultProvider {
   defaultProvider: string;
   defaultEmbeddingProvider: string;
+  defaultAgentProvider: string;
 }

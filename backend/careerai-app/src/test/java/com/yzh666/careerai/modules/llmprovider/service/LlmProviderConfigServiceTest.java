@@ -1,6 +1,7 @@
 package com.yzh666.careerai.modules.llmprovider.service;
 
 import com.yzh666.careerai.common.ai.LlmProviderRegistry;
+import com.yzh666.careerai.common.agent.AgentModelRuntimeConfig;
 import com.yzh666.careerai.common.config.LlmProviderProperties;
 import com.yzh666.careerai.common.exception.BusinessException;
 import com.yzh666.careerai.common.exception.ErrorCode;
@@ -260,6 +261,39 @@ class LlmProviderConfigServiceTest {
 
             verify(properties).setDefaultProvider("glm");
             verify(registry).reload();
+        }
+
+        @Test
+        @DisplayName("Agent 默认 Provider 可独立于聊天默认 Provider")
+        void updateDefaultAgentProviderPersistsValue() {
+            Map<String, LlmProviderProperties.ProviderConfig> providers = new LinkedHashMap<>();
+            providers.put("dashscope", createProviderConfig(
+                "https://dashscope.aliyuncs.com/compatible-mode/v1", "key", "qwen", null));
+            providers.put("glm", createProviderConfig(
+                "https://open.bigmodel.cn/api/coding/paas/v4", "key", "glm-4-flash", null));
+            when(properties.getProviders()).thenReturn(providers);
+
+            service.updateDefaultAgentProvider(new DefaultProviderDTO(null, null, "glm"));
+
+            verify(properties).setDefaultAgentProvider("glm");
+            verify(registry).reload();
+        }
+
+        @Test
+        @DisplayName("内部运行时配置返回 Agent 默认模型明文快照")
+        void getAgentModelRuntimeConfigReturnsSelectedProvider() {
+            Map<String, LlmProviderProperties.ProviderConfig> providers = new LinkedHashMap<>();
+            providers.put("glm", createProviderConfig(
+                "https://open.bigmodel.cn/api/coding/paas/v4", "agent-secret", "glm-4-flash", null));
+            when(properties.getProviders()).thenReturn(providers);
+            when(properties.getDefaultAgentProvider()).thenReturn("glm");
+
+            AgentModelRuntimeConfig config = service.getAgentModelRuntimeConfig();
+
+            assertEquals("glm", config.providerId());
+            assertEquals("agent-secret", config.apiKey());
+            assertEquals("glm-4-flash", config.model());
+            assertEquals("https://open.bigmodel.cn/api/coding/paas/v4", config.baseUrl());
         }
     }
 

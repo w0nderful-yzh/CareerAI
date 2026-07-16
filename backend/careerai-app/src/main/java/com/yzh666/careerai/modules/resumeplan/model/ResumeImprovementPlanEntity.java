@@ -8,6 +8,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Index;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import java.time.LocalDateTime;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -18,6 +19,11 @@ import lombok.Setter;
     @Index(name = "idx_resume_plan_user_created", columnList = "userId,createdAt"),
     @Index(name = "idx_resume_plan_user_report_created", columnList = "userId,matchReportId,createdAt"),
     @Index(name = "idx_resume_plan_user_job_created", columnList = "userId,jobId,createdAt")
+}, uniqueConstraints = {
+    @UniqueConstraint(
+        name = "uk_resume_plan_agent_idempotency",
+        columnNames = {"userId", "agentIdempotencyKey"}
+    )
 })
 @Getter
 @Setter
@@ -66,6 +72,14 @@ public class ResumeImprovementPlanEntity {
 
     @Column(columnDefinition = "TEXT")
     private String learningTasksJson;
+
+    /** 将散落的建议收敛为带优先级、周期和验证方式的任务。 */
+    @Column(columnDefinition = "TEXT")
+    private String preparationTasksJson;
+
+    /** 仅 Agent 写操作使用，用于避免重试时重复生成计划。 */
+    @Column(length = 120)
+    private String agentIdempotencyKey;
 
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;

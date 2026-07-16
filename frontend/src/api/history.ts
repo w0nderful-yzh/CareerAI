@@ -71,11 +71,32 @@ export interface AnswerItem {
   question: string;
   category: string;
   userAnswer: string;
-  score: number;
+  score: number | null;
   feedback: string;
   referenceAnswer?: string;
   keyPoints?: string[];
+  evaluation?: InterviewTurnEvaluation | null;
+  agentAction?: string | null;
+  decisionRationale?: string | null;
   answeredAt: string;
+}
+
+export interface InterviewTurnEvaluation {
+  answered: boolean;
+  technicalCorrectness?: number | null;
+  technicalDepth?: number | null;
+  completeness?: number | null;
+  scenarioReasoning?: number | null;
+  projectUnderstanding?: number | null;
+  troubleshooting?: number | null;
+  expressionStructure?: number | null;
+  clarity?: number | null;
+  credibility?: number | null;
+  jobRelevance?: number | null;
+  missingPoints: string[];
+  errors: string[];
+  evidenceSnippets: string[];
+  confidence: number;
 }
 
 export interface ResumeDetail {
@@ -97,7 +118,50 @@ export interface InterviewDetail extends InterviewItem {
   evaluateStatus?: EvaluateStatus;
   evaluateError?: string;
   jobEvaluation?: JobEvaluation | null;
+  endReason?: string | null;
+  completionType?: 'COMPLETE' | 'PARTIAL' | null;
+  coveredTargets?: string[];
+  unverifiedTargets?: string[];
   answers: AnswerItem[];
+}
+
+export interface InterviewClosureEvidence {
+  questionIndex: number;
+  question: string;
+  category: string;
+  observedScore: number;
+  evidenceSnippets: string[];
+  missingPoints: string[];
+  errors: string[];
+}
+
+export interface InterviewImprovementTask {
+  id: number;
+  idempotencyKey: string;
+  questionIndex: number;
+  category: string;
+  priority: 'HIGH' | 'MEDIUM' | 'LOW';
+  status: 'TODO' | 'DONE' | string;
+  title: string;
+  rationale: string;
+  verificationMethod: string;
+  evidenceSnippets: string[];
+}
+
+export interface InterviewClosure {
+  sessionId: string;
+  completionType: 'COMPLETE' | 'PARTIAL';
+  endReason: string;
+  overallScore: number | null;
+  summary: string;
+  strengths: string[];
+  observedWeaknesses: string[];
+  coveredTargets: string[];
+  unverifiedTargets: string[];
+  keyEvidence: InterviewClosureEvidence[];
+  nextInterviewSuggestions: string[];
+  improvementTasks: InterviewImprovementTask[];
+  generatedAt: string;
 }
 
 export const historyApi = {
@@ -120,6 +184,11 @@ export const historyApi = {
    */
   async getInterviewDetail(sessionId: string): Promise<InterviewDetail> {
     return request.get<InterviewDetail>(`/api/interview/sessions/${sessionId}/details`);
+  },
+
+  /** 读取 Agent 在最终评估后生成的结束总结、证据和改进任务。 */
+  async getInterviewClosure(sessionId: string): Promise<InterviewClosure> {
+    return request.get<InterviewClosure>(`/api/interview/sessions/${sessionId}/closure`);
   },
 
   /**

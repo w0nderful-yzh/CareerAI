@@ -1,7 +1,8 @@
 import {useMemo, useState} from 'react';
 import {AnimatePresence, motion} from 'framer-motion';
 import {getScoreColor} from '../utils/score';
-import type {InterviewDetail} from '../api/history';
+import type {AnswerItem, InterviewDetail, InterviewTurnEvaluation} from '../api/history';
+import InterviewClosureSection from './InterviewClosureSection';
 
 interface InterviewDetailPanelProps {
   interview: InterviewDetail;
@@ -47,13 +48,21 @@ export default function InterviewDetailPanel({ interview }: InterviewDetailPanel
       animate={{ opacity: 1, y: 0 }}
     >
       {/* 评分卡片 */}
-        <ScoreCard
+      <ScoreCard
         score={interview.overallScore}
         feedback={interview.overallFeedback}
         scorePercent={scorePercent}
         circumference={circumference}
         strokeDashoffset={strokeDashoffset}
       />
+
+      {(interview.completionType || interview.coveredTargets?.length || interview.unverifiedTargets?.length) && (
+        <CompletionEvidenceSection interview={interview} />
+      )}
+
+      {(interview.status === 'EVALUATED' || interview.evaluateStatus === 'COMPLETED') && (
+        <InterviewClosureSection sessionId={interview.sessionId} />
+      )}
 
       {/* 岗位化评价 */}
       {interview.jobEvaluation && (
@@ -77,6 +86,77 @@ export default function InterviewDetailPanel({ interview }: InterviewDetailPanel
         toggleQuestion={toggleQuestion}
       />
     </motion.div>
+  );
+}
+
+const END_REASON_LABELS: Record<string, string> = {
+  USER_REQUESTED: '用户主动结束',
+  MANUAL_BUTTON: '手动结束',
+  PLAN_COMPLETED: '计划已完成',
+  QUESTION_LIMIT: '达到题目上限',
+  TIME_LIMIT: '达到时间上限',
+  SUFFICIENT_EVIDENCE: '能力证据已充分',
+  LOW_INFORMATION: '连续低信息回答',
+  OFF_TOPIC: '回答持续偏题',
+  SYSTEM_ERROR: '系统异常中止',
+};
+
+function CompletionEvidenceSection({ interview }: { interview: InterviewDetail }) {
+  const complete = interview.completionType === 'COMPLETE';
+  return (
+    <motion.section
+      className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800"
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.05 }}
+    >
+      <div className="flex flex-col gap-3 border-b border-slate-100 px-6 py-5 dark:border-slate-700 md:flex-row md:items-center md:justify-between">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Interview coverage</p>
+          <h4 className="mt-1 text-lg font-bold text-slate-900 dark:text-white">本次面试证据覆盖</h4>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className={`rounded-full px-3 py-1 text-xs font-bold ${complete
+            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+            : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'}`}>
+            {complete ? '完整完成' : '部分完成'}
+          </span>
+          {interview.endReason && (
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600 dark:bg-slate-700 dark:text-slate-300">
+              {END_REASON_LABELS[interview.endReason] || interview.endReason}
+            </span>
+          )}
+        </div>
+      </div>
+      <div className="grid gap-5 p-6 md:grid-cols-2">
+        <TargetList title="已验证目标" items={interview.coveredTargets || []} tone="covered" />
+        <TargetList title="尚未验证" items={interview.unverifiedTargets || []} tone="pending" />
+      </div>
+    </motion.section>
+  );
+}
+
+function TargetList({ title, items, tone }: { title: string; items: string[]; tone: 'covered' | 'pending' }) {
+  const covered = tone === 'covered';
+  return (
+    <div>
+      <div className="mb-3 flex items-center justify-between">
+        <h5 className="text-sm font-bold text-slate-800 dark:text-white">{title}</h5>
+        <span className="font-mono text-xs text-slate-400">{items.length}</span>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {items.length ? items.map(item => (
+          <span
+            key={`${tone}-${item}`}
+            className={`rounded-lg border px-3 py-1.5 text-xs font-medium ${covered
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-900/20 dark:text-emerald-300'
+              : 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-300'}`}
+          >
+            {item}
+          </span>
+        )) : <span className="text-sm text-slate-400">暂无</span>}
+      </div>
+    </div>
   );
 }
 
@@ -274,7 +354,7 @@ function QuestionsSection({
   expandedQuestions,
   toggleQuestion
 }: {
-  answers: any[];
+  answers: AnswerItem[];
   expandedQuestions: Set<number>;
   toggleQuestion: (index: number) => void;
 }) {
@@ -303,17 +383,26 @@ function QuestionsSection({
 }
 
 // 问题卡片组件
+const CONTROL_ACTION_LABELS: Record<string, string> = {
+  SKIP: '已跳过',
+  CONTINUE: '讲解后继续',
+  END: '用户结束',
+};
+
 function QuestionCard({
   answer,
   index,
   isExpanded,
   onToggle
 }: {
-  answer: any;
+  answer: AnswerItem;
   index: number;
   isExpanded: boolean;
   onToggle: () => void;
 }) {
+  const controlLabel = answer.agentAction
+    ? CONTROL_ACTION_LABELS[answer.agentAction]
+    : undefined;
   return (
       <motion.div
           className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm overflow-hidden"
@@ -335,9 +424,13 @@ function QuestionCard({
               className="px-3 py-1 bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 text-xs font-medium rounded-full">
             {answer.category || '综合'}
           </span>
-          <span className={`font-semibold ${getScoreColor(answer.score, [80, 60])}`}>
-            得分: {answer.score}
-          </span>
+          {answer.score === null ? (
+            <span className="font-semibold text-slate-400">未评分{controlLabel ? ` · ${controlLabel}` : ''}</span>
+          ) : (
+            <span className={`font-semibold ${getScoreColor(answer.score, [80, 60])}`}>
+              得分: {answer.score}
+            </span>
+          )}
         </div>
           <motion.svg
           className="w-5 h-5 text-slate-400"
@@ -397,6 +490,26 @@ function QuestionCard({
                 </div>
               )}
 
+              {answer.evaluation && (
+                <TurnEvidenceCard
+                  evaluation={answer.evaluation}
+                  action={answer.agentAction}
+                  rationale={answer.decisionRationale}
+                />
+              )}
+
+              {!answer.evaluation && controlLabel && (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-600 dark:bg-slate-700/40">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm font-bold text-slate-700 dark:text-slate-200">{controlLabel}</span>
+                    <span className="font-mono text-[11px] text-slate-400">NO SCORE</span>
+                  </div>
+                  {answer.decisionRationale && (
+                    <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">{answer.decisionRationale}</p>
+                  )}
+                </div>
+              )}
+
               {/* 参考答案 */}
               {answer.referenceAnswer && (
                   <div
@@ -418,5 +531,98 @@ function QuestionCard({
         )}
       </AnimatePresence>
     </motion.div>
+  );
+}
+
+const DIMENSION_LABELS: Array<[keyof InterviewTurnEvaluation, string]> = [
+  ['technicalCorrectness', '技术正确性'],
+  ['technicalDepth', '技术深度'],
+  ['completeness', '回答完整性'],
+  ['scenarioReasoning', '场景推理'],
+  ['projectUnderstanding', '项目理解'],
+  ['troubleshooting', '排障能力'],
+  ['expressionStructure', '表达结构'],
+  ['clarity', '清晰度'],
+  ['credibility', '可信度'],
+  ['jobRelevance', '岗位相关性'],
+];
+
+const ACTION_LABELS: Record<string, string> = {
+  FOLLOW_UP: '继续追问',
+  SWITCH_TOPIC: '切换主题',
+  ADJUST_DIFFICULTY: '调整难度',
+  END_INTERVIEW: '结束面试',
+};
+
+function TurnEvidenceCard({
+  evaluation,
+  action,
+  rationale,
+}: {
+  evaluation: InterviewTurnEvaluation;
+  action?: string | null;
+  rationale?: string | null;
+}) {
+  const dimensions = DIMENSION_LABELS.flatMap(([key, label]) => {
+    const value = evaluation[key];
+    return typeof value === 'number' ? [{ key, label, value }] : [];
+  });
+
+  return (
+    <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 p-4 dark:border-indigo-900/50 dark:bg-indigo-950/20">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm font-bold text-indigo-950 dark:text-indigo-100">Agent 单轮判断</p>
+        <div className="flex items-center gap-2">
+          {action && (
+            <span className="rounded-md bg-indigo-600 px-2.5 py-1 text-[11px] font-bold text-white">
+              {ACTION_LABELS[action] || action}
+            </span>
+          )}
+          <span className="font-mono text-[11px] text-indigo-500">置信度 {evaluation.confidence}%</span>
+        </div>
+      </div>
+
+      {rationale && <p className="mt-3 text-sm leading-6 text-slate-600 dark:text-slate-300">{rationale}</p>}
+
+      {dimensions.length > 0 && (
+        <div className="mt-4 grid gap-2 sm:grid-cols-2">
+          {dimensions.map(({ key, label, value }) => (
+            <div key={String(key)} className="flex items-center gap-3 rounded-lg bg-white/80 px-3 py-2 dark:bg-slate-800/70">
+              <span className="w-20 shrink-0 text-xs text-slate-500 dark:text-slate-400">{label}</span>
+              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
+                <div className="h-full rounded-full bg-indigo-500" style={{ width: `${value}%` }} />
+              </div>
+              <span className="w-7 text-right font-mono text-xs font-bold text-slate-700 dark:text-slate-200">{value}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {evaluation.evidenceSnippets?.length > 0 && (
+        <div className="mt-4 border-l-2 border-indigo-300 pl-3 dark:border-indigo-700">
+          <p className="mb-1 text-[11px] font-bold uppercase tracking-wider text-indigo-500">回答原文证据</p>
+          {evaluation.evidenceSnippets.map((snippet, index) => (
+            <p key={`${snippet}-${index}`} className="text-sm italic leading-6 text-slate-700 dark:text-slate-300">
+              “{snippet}”
+            </p>
+          ))}
+        </div>
+      )}
+
+      {(evaluation.missingPoints?.length > 0 || evaluation.errors?.length > 0) && (
+        <div className="mt-4 flex flex-wrap gap-2">
+          {evaluation.missingPoints?.map(item => (
+            <span key={`missing-${item}`} className="rounded-md bg-amber-100 px-2 py-1 text-xs text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
+              缺失：{item}
+            </span>
+          ))}
+          {evaluation.errors?.map(item => (
+            <span key={`error-${item}`} className="rounded-md bg-rose-100 px-2 py-1 text-xs text-rose-800 dark:bg-rose-900/30 dark:text-rose-300">
+              错误：{item}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

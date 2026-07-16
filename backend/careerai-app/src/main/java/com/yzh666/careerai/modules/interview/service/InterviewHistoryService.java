@@ -3,6 +3,7 @@ package com.yzh666.careerai.modules.interview.service;
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
+import com.yzh666.careerai.common.agent.tool.AgentInterviewTurnEvaluation;
 import com.yzh666.careerai.common.exception.BusinessException;
 import com.yzh666.careerai.common.exception.ErrorCode;
 import com.yzh666.careerai.infrastructure.export.PdfExportService;
@@ -54,6 +55,8 @@ public class InterviewHistoryService {
             }
         );
         List<Object> referenceAnswers = parseJson(session.getReferenceAnswersJson(), new TypeReference<>() {});
+        List<String> coveredTargets = parseJson(session.getCoveredTargetsJson(), new TypeReference<>() {});
+        List<String> unverifiedTargets = parseJson(session.getUnverifiedTargetsJson(), new TypeReference<>() {});
 
         // 解析所有题目（用于构建完整的答案列表）
         List<InterviewQuestionDTO> allQuestions = parseJson(
@@ -76,6 +79,8 @@ public class InterviewHistoryService {
             improvements,
             jobEvaluation,
             referenceAnswers,
+            coveredTargets == null ? List.of() : coveredTargets,
+            unverifiedTargets == null ? List.of() : unverifiedTargets,
             answerList
         );
     }
@@ -90,7 +95,11 @@ public class InterviewHistoryService {
     ) {
         if (allQuestions == null || allQuestions.isEmpty()) {
             // 如果没有题目数据，回退到仅显示已回答的题目
-            return interviewMapper.toAnswerDetailDTOList(answers, this::extractKeyPoints);
+            return interviewMapper.toAnswerDetailDTOList(
+                answers,
+                this::extractKeyPoints,
+                this::extractTurnEvaluation
+            );
         }
 
         // 将答案按 questionIndex 索引
@@ -107,7 +116,11 @@ public class InterviewHistoryService {
                 InterviewAnswerEntity answer = answerMap.get(question.questionIndex());
                 if (answer != null) {
                     // 用户已回答，使用答案数据
-                    return interviewMapper.toAnswerDetailDTO(answer, extractKeyPoints(answer));
+                    return interviewMapper.toAnswerDetailDTO(
+                        answer,
+                        extractKeyPoints(answer),
+                        extractTurnEvaluation(answer)
+                    );
                 } else {
                     // 用户未回答，构建空答案
                     return new InterviewDetailDTO.AnswerDetailDTO(
@@ -119,6 +132,9 @@ public class InterviewHistoryService {
                         question.feedback(),  // feedback
                         null,  // referenceAnswer
                         null,  // keyPoints
+                        null,  // evaluation
+                        null,  // agentAction
+                        null,  // decisionRationale
                         null   // answeredAt
                     );
                 }
@@ -131,6 +147,13 @@ public class InterviewHistoryService {
      */
     private List<String> extractKeyPoints(InterviewAnswerEntity answer) {
         return parseJson(answer.getKeyPointsJson(), new TypeReference<>() {});
+    }
+
+    /**
+     * 读取 Agent 在答题当时写入的结构化评价，详情页只展示历史证据，不重复调用模型。
+     */
+    private AgentInterviewTurnEvaluation extractTurnEvaluation(InterviewAnswerEntity answer) {
+        return parseJson(answer.getEvaluationJson(), new TypeReference<>() {});
     }
 
     /**

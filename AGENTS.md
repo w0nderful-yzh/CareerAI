@@ -11,6 +11,7 @@ stable.
 - `backend/gateway-service/`: Spring Cloud Gateway MVC static routing module.
 - `backend/careerai-app/`: Spring Boot application.
 - `backend/knowledge-service/`: first split-out knowledge base and RAG service.
+- `backend/agent-service/`: stateless Java bridge for protected Agent config and business adapters.
 - `docs/`: architecture, migration and delivery notes.
 
 ## Commands
@@ -20,6 +21,7 @@ sdk env
 cd backend && mvn clean test
 cd backend && mvn -pl careerai-app spring-boot:run
 cd backend && mvn -pl knowledge-service spring-boot:run
+cd backend && mvn -pl agent-service spring-boot:run
 cd backend && mvn -pl gateway-service spring-boot:run
 ```
 

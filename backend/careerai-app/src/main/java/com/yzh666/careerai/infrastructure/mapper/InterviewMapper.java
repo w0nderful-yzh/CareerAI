@@ -1,5 +1,6 @@
 package com.yzh666.careerai.infrastructure.mapper;
 
+import com.yzh666.careerai.common.agent.tool.AgentInterviewTurnEvaluation;
 import com.yzh666.careerai.modules.interview.model.InterviewAnswerEntity;
 import com.yzh666.careerai.modules.interview.model.InterviewDetailDTO;
 import com.yzh666.careerai.modules.interview.model.InterviewHistoryItemDTO;
@@ -44,9 +45,11 @@ public interface InterviewMapper {
      * 注意：keyPoints 需要从 JSON 解析后传入
      */
     @Mapping(target = "keyPoints", source = "keyPoints")
+    @Mapping(target = "evaluation", source = "evaluation")
     InterviewDetailDTO.AnswerDetailDTO toAnswerDetailDTO(
         InterviewAnswerEntity entity,
-        List<String> keyPoints
+        List<String> keyPoints,
+        AgentInterviewTurnEvaluation evaluation
     );
 
     /**
@@ -54,10 +57,15 @@ public interface InterviewMapper {
      */
     default List<InterviewDetailDTO.AnswerDetailDTO> toAnswerDetailDTOList(
         List<InterviewAnswerEntity> entities,
-        Function<InterviewAnswerEntity, List<String>> keyPointsExtractor
+        Function<InterviewAnswerEntity, List<String>> keyPointsExtractor,
+        Function<InterviewAnswerEntity, AgentInterviewTurnEvaluation> evaluationExtractor
     ) {
         return entities.stream()
-            .map(e -> toAnswerDetailDTO(e, keyPointsExtractor.apply(e)))
+            .map(e -> toAnswerDetailDTO(
+                e,
+                keyPointsExtractor.apply(e),
+                evaluationExtractor.apply(e)
+            ))
             .toList();
     }
 
@@ -75,6 +83,10 @@ public interface InterviewMapper {
     @Mapping(target = "improvements", source = "improvements")
     @Mapping(target = "jobEvaluation", source = "jobEvaluation")
     @Mapping(target = "referenceAnswers", source = "referenceAnswers")
+    @Mapping(target = "endReason", expression = "java(session.getEndReason() != null ? session.getEndReason().name() : null)")
+    @Mapping(target = "completionType", expression = "java(session.getCompletionType() != null ? session.getCompletionType().name() : null)")
+    @Mapping(target = "coveredTargets", source = "coveredTargets")
+    @Mapping(target = "unverifiedTargets", source = "unverifiedTargets")
     @Mapping(target = "answers", source = "answers")
     InterviewDetailDTO toDetailDTO(
         InterviewSessionEntity session,
@@ -83,6 +95,8 @@ public interface InterviewMapper {
         List<String> improvements,
         InterviewReportDTO.JobEvaluation jobEvaluation,
         List<Object> referenceAnswers,
+        List<String> coveredTargets,
+        List<String> unverifiedTargets,
         List<InterviewDetailDTO.AnswerDetailDTO> answers
     );
 

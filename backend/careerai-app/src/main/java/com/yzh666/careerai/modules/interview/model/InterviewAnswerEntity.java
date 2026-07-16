@@ -47,6 +47,21 @@ public class InterviewAnswerEntity {
     // 反馈
     @Column(columnDefinition = "TEXT")
     private String feedback;
+
+    // Agent 单轮多维评价（JSON），维度不适用时保留 null。
+    @Column(columnDefinition = "TEXT")
+    private String evaluationJson;
+
+    @Column(length = 32)
+    private String agentAction;
+
+    @Column(columnDefinition = "TEXT")
+    private String decisionRationale;
+
+    // 对应规范化问题；历史数据允许为空。
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "question_record_id")
+    private InterviewQuestionRecordEntity questionRecord;
     
     // 参考答案
     @Column(columnDefinition = "TEXT")
@@ -132,6 +147,38 @@ public class InterviewAnswerEntity {
     
     public String getReferenceAnswer() {
         return referenceAnswer;
+    }
+
+    public String getEvaluationJson() {
+        return evaluationJson;
+    }
+
+    public void setEvaluationJson(String evaluationJson) {
+        this.evaluationJson = evaluationJson;
+    }
+
+    public String getAgentAction() {
+        return agentAction;
+    }
+
+    public void setAgentAction(String agentAction) {
+        this.agentAction = agentAction;
+    }
+
+    public String getDecisionRationale() {
+        return decisionRationale;
+    }
+
+    public void setDecisionRationale(String decisionRationale) {
+        this.decisionRationale = decisionRationale;
+    }
+
+    public InterviewQuestionRecordEntity getQuestionRecord() {
+        return questionRecord;
+    }
+
+    public void setQuestionRecord(InterviewQuestionRecordEntity questionRecord) {
+        this.questionRecord = questionRecord;
     }
     
     public void setReferenceAnswer(String referenceAnswer) {

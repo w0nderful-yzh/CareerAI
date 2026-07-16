@@ -1,19 +1,31 @@
 import {useEffect, useRef, useState} from 'react';
 import {motion} from 'framer-motion';
 import {interviewApi} from '../api/interview';
+import {agentApi} from '../api/agent';
 import ConfirmDialog from '../components/ConfirmDialog';
 import InterviewChatPanel from '../components/InterviewChatPanel';
 import InterviewPageHeader from '../components/InterviewPageHeader';
-import type {InterviewQuestion, InterviewSession} from '../types/interview';
+import type {
+  AdaptiveInterviewTurnResult,
+  InterviewBlueprint,
+  InterviewAgentDecision,
+  InterviewQuestion,
+  InterviewSession,
+  InterviewIntent,
+  InterviewTrainingMode,
+} from '../types/interview';
 import type {Difficulty} from '../components/UnifiedInterviewModal';
 import type {CategoryDTO} from '../api/skill';
 import { CUSTOM_SKILL_ID } from '../hooks/useInterviewConfig';
+import { AlertCircle, BrainCircuit, GitBranch, Gauge, Target } from 'lucide-react';
 
 interface Message {
   type: 'interviewer' | 'user';
   content: string;
   category?: string;
   questionIndex?: number;
+  streamId?: string;
+  streaming?: boolean;
 }
 
 interface InterviewProps {
@@ -29,6 +41,8 @@ interface InterviewProps {
     jdText?: string;
     jobId?: number;
     matchReportId?: number;
+    trainingMode?: InterviewTrainingMode;
+    userFocus?: string;
   };
   onBack: () => void;
   onInterviewComplete: () => void;
@@ -47,9 +61,12 @@ export default function Interview({
   const [messages, setMessages] = useState<Message[]>([]);
   const [answer, setAnswer] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [streamStatus, setStreamStatus] = useState('');
   const [error, setError] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
+  const [lastDecision, setLastDecision] = useState<InterviewAgentDecision | null>(null);
+  const [awaitingContinue, setAwaitingContinue] = useState(false);
   const startedRef = useRef(false);
 
   const questionCount = initialConfig?.questionCount ?? 8;
@@ -60,6 +77,9 @@ export default function Interview({
   const jdText = initialConfig?.jdText;
   const jobId = initialConfig?.jobId;
   const matchReportId = initialConfig?.matchReportId;
+  const trainingMode = initialConfig?.trainingMode
+    ?? (matchReportId ? 'JOB_TARGETED' : resumeId ? 'RESUME_DEFENSE' : 'GENERAL');
+  const userFocus = initialConfig?.userFocus;
 
   // 自动开始面试（恢复已有会话 或 创建新会话）
   useEffect(() => {
@@ -79,7 +99,7 @@ export default function Interview({
     setError('');
 
     try {
-      const newSession = await interviewApi.createSession({
+      const newSession = await agentApi.createInterviewSession({
         resumeText,
         questionCount,
         resumeId,
@@ -91,6 +111,8 @@ export default function Interview({
         jdText: skillId === CUSTOM_SKILL_ID ? jdText : undefined,
         jobId,
         matchReportId,
+        trainingMode,
+        userFocus,
       });
 
       initSession(newSession);
@@ -133,13 +155,16 @@ export default function Interview({
 
       // 重建消息历史
       const restoredMessages: Message[] = [];
-      for (let i = 0; i <= idx; i++) {
-        const q = s.questions[i];
+      for (const q of s.questions) {
+        // Agent 换题时会跳过低价值追问，恢复页面时不展示这些未实际问过的题。
+        if (!q.userAnswer && q.questionIndex !== currentQ.questionIndex) {
+          continue;
+        }
         restoredMessages.push({
           type: 'interviewer',
           content: q.question,
           category: q.category,
-          questionIndex: i
+          questionIndex: q.questionIndex
         });
         if (q.userAnswer) {
           restoredMessages.push({
@@ -152,27 +177,126 @@ export default function Interview({
     }
   };
 
-  const handleSubmitAnswer = async () => {
-    if (!answer.trim() || !session || !currentQuestion) return;
+  const submitInteraction = async (intent: InterviewIntent, content = '') => {
+    if (!session || !currentQuestion || (intent === 'AUTO' && !content.trim())) return;
 
     setIsSubmitting(true);
+    setStreamStatus('正在连接面试 Agent');
+    setError('');
 
+    const controlLabels: Partial<Record<InterviewIntent, string>> = {
+      HINT: '请给我一点提示',
+      EXPLAIN: '请讲解这道题',
+      SKIP: '跳过这道题',
+      CONTINUE: '继续下一题',
+      END: '结束本次面试',
+    };
+    const displayContent = content.trim() || controlLabels[intent] || '';
     const userMessage: Message = {
       type: 'user',
-      content: answer
+      content: displayContent,
     };
     setMessages(prev => [...prev, userMessage]);
 
     try {
-      const response = await interviewApi.submitAnswer({
-        sessionId: session.sessionId,
-        questionIndex: currentQuestion.questionIndex,
-        answer: answer.trim()
+      let turnResponse: AdaptiveInterviewTurnResult | undefined;
+      let streamError: Error | undefined;
+      let streamedAssistant = '';
+      const streamId = `assist-${session.sessionId}-${currentQuestion.questionIndex}-${Date.now()}`;
+      const assistanceCategory = intent === 'HINT' ? '教练提示' : '题目讲解';
+
+      await agentApi.submitInterviewTurnStream(
+        session.sessionId,
+        currentQuestion.questionIndex,
+        content.trim(),
+        intent,
+        {
+          onProgress: progress => setStreamStatus(progress.label),
+          onAssistantDelta: chunk => {
+            streamedAssistant += chunk;
+            setMessages(previous => {
+              const exists = previous.some(message => message.streamId === streamId);
+              if (!exists) {
+                return [...previous, {
+                  type: 'interviewer',
+                  content: streamedAssistant,
+                  category: assistanceCategory,
+                  questionIndex: currentQuestion.questionIndex,
+                  streamId,
+                  streaming: true,
+                }];
+              }
+              return previous.map(message => message.streamId === streamId
+                ? { ...message, content: streamedAssistant, streaming: true }
+                : message);
+            });
+          },
+          onResult: result => {
+            turnResponse = result;
+          },
+          onError: streamFailure => {
+            streamError = streamFailure;
+          },
+        },
+      );
+      if (streamError) throw streamError;
+      if (!turnResponse) throw new Error('面试 Agent 未返回完整结果');
+      const response = turnResponse;
+
+      const assistanceIntent = response.intent === 'HINT' || response.intent === 'EXPLAIN';
+      if (!assistanceIntent || intent === 'AUTO') {
+        setAnswer('');
+      }
+      setLastDecision(response.decision);
+      setAwaitingContinue(response.intent === 'EXPLAIN');
+
+      if (streamedAssistant) {
+        setMessages(previous => previous.map(message => message.streamId === streamId
+          ? {
+              ...message,
+              content: response.assistantMessage || streamedAssistant,
+              streaming: false,
+            }
+          : message));
+      } else if (response.assistantMessage) {
+        setMessages(prev => [...prev, {
+          type: 'interviewer',
+          content: response.assistantMessage!,
+          category: response.intent === 'HINT' ? '教练提示' : '题目讲解',
+          questionIndex: currentQuestion.questionIndex,
+        }]);
+      }
+
+      const answeredNormally = response.intent === 'ANSWER' && response.decision !== null;
+      setSession(previous => {
+        if (!previous) return previous;
+        const updatedQuestions = answeredNormally
+          ? previous.questions.map(question => question.questionIndex === currentQuestion.questionIndex
+              ? {
+                  ...question,
+                  userAnswer: content.trim(),
+                  score: response.decision!.answerScore,
+                  feedback: response.decision!.feedback,
+                }
+              : question)
+          : [...previous.questions];
+        // Agent 增量出题后立即追加到本地会话，后续轮次和页面状态保持一致。
+        if (response.nextQuestion
+            && !updatedQuestions.some(question =>
+              question.questionIndex === response.nextQuestion!.questionIndex)) {
+          updatedQuestions.push(response.nextQuestion);
+        }
+        return {
+          ...previous,
+          currentQuestionIndex: response.nextQuestion?.questionIndex
+            ?? (response.completed ? previous.currentQuestionIndex + 1 : previous.currentQuestionIndex),
+          status: response.completed ? 'COMPLETED' : 'IN_PROGRESS',
+          questions: updatedQuestions,
+        };
       });
 
-      setAnswer('');
-
-      if (response.hasNextQuestion && response.nextQuestion) {
+      const staysOnCurrentQuestion = assistanceIntent;
+      if (!response.completed && response.nextQuestion && !staysOnCurrentQuestion) {
         setCurrentQuestion(response.nextQuestion);
         setMessages(prev => [...prev, {
           type: 'interviewer',
@@ -181,30 +305,29 @@ export default function Interview({
           questionIndex: response.nextQuestion!.questionIndex
         }]);
       } else {
-        onInterviewComplete();
+        if (response.completed) {
+          onInterviewComplete();
+        }
       }
     } catch (err) {
-      setError('提交答案失败，请重试');
+      setMessages(previous => previous.map(message => message.streaming
+        ? { ...message, streaming: false }
+        : message));
+      setError(err instanceof Error ? err.message : '面试操作失败，请重试');
       console.error(err);
     } finally {
+      setStreamStatus('');
       setIsSubmitting(false);
     }
   };
 
-  const handleCompleteEarly = async () => {
-    if (!session) return;
+  const handleSubmitAnswer = async () => {
+    await submitInteraction('AUTO', answer);
+  };
 
-    setIsSubmitting(true);
-    try {
-      await interviewApi.completeInterview(session.sessionId);
-      setShowCompleteConfirm(false);
-      onInterviewComplete();
-    } catch (err) {
-      setError('提前交卷失败，请重试');
-      console.error(err);
-    } finally {
-      setIsSubmitting(false);
-    }
+  const handleCompleteEarly = async () => {
+    setShowCompleteConfirm(false);
+    await submitInteraction('END');
   };
 
   // 加载中
@@ -266,6 +389,14 @@ export default function Interview({
         animate={{ opacity: 1 }}
         transition={{ duration: 0.3 }}
       >
+        {session.blueprint && <InterviewBlueprintCard blueprint={session.blueprint} />}
+        {lastDecision && <InterviewDecisionCard decision={lastDecision} />}
+        {error && (
+          <div className="mb-4 flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/25 dark:text-rose-300">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
         <InterviewChatPanel
           session={session}
           currentQuestion={currentQuestion}
@@ -273,8 +404,14 @@ export default function Interview({
           answer={answer}
           onAnswerChange={setAnswer}
           onSubmit={handleSubmitAnswer}
+          onHint={() => submitInteraction('HINT')}
+          onExplain={() => submitInteraction('EXPLAIN')}
+          onSkip={() => submitInteraction('SKIP')}
+          onContinue={() => submitInteraction('CONTINUE')}
+          awaitingContinue={awaitingContinue}
           onCompleteEarly={handleCompleteEarly}
           isSubmitting={isSubmitting}
+          streamStatus={streamStatus}
           showCompleteConfirm={showCompleteConfirm}
           onShowCompleteConfirm={setShowCompleteConfirm}
         />
@@ -284,7 +421,7 @@ export default function Interview({
       <ConfirmDialog
         open={showCompleteConfirm}
         title="提前交卷"
-        message="确定要提前交卷吗？未回答的问题将按0分计算。"
+        message="确定结束本次面试吗？当前题不会被评分，已回答内容将生成部分评价。"
         confirmText="确定交卷"
         cancelText="取消"
         confirmVariant="warning"
@@ -293,5 +430,103 @@ export default function Interview({
         onCancel={() => setShowCompleteConfirm(false)}
       />
     </div>
+  );
+}
+
+const MODE_LABELS: Record<InterviewTrainingMode, string> = {
+  GENERAL: '综合摸底',
+  JOB_TARGETED: '岗位定向',
+  FOCUS_DRILL: '专项强化',
+  RESUME_DEFENSE: '简历深挖',
+};
+
+const QUESTION_TYPE_LABELS: Record<InterviewBlueprint['questionTypes'][number], string> = {
+  CONCEPT: '原理',
+  PROJECT_EVIDENCE: '项目证据',
+  SCENARIO_DESIGN: '场景设计',
+  TROUBLESHOOTING: '故障排查',
+};
+
+function InterviewBlueprintCard({ blueprint }: { blueprint: InterviewBlueprint }) {
+  return (
+    <aside className="mb-4 rounded-xl border border-cyan-200 bg-cyan-50/70 px-4 py-3 dark:border-cyan-900/50 dark:bg-cyan-950/20">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-sm font-semibold text-cyan-900 dark:text-cyan-100">
+          <Target className="h-4 w-4" />
+          {MODE_LABELS[blueprint.mode]} · {blueprint.objective}
+        </div>
+        <span className="text-xs text-cyan-700 dark:text-cyan-300">
+          每个主题最多追问 {blueprint.maxFollowUpsPerTopic} 次
+        </span>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {blueprint.focusTopics.map(topic => (
+          <span key={topic} className="rounded-md bg-white px-2 py-1 text-xs text-slate-700 shadow-sm dark:bg-slate-900 dark:text-slate-200">
+            {topic}
+          </span>
+        ))}
+        {blueprint.questionTypes.map(type => (
+          <span key={type} className="rounded-md border border-cyan-200 px-2 py-1 text-xs text-cyan-700 dark:border-cyan-800 dark:text-cyan-300">
+            {QUESTION_TYPE_LABELS[type]}
+          </span>
+        ))}
+        {blueprint.targetRequirementIds.map(id => (
+          <span key={id} className="rounded-md bg-slate-900 px-2 py-1 text-xs text-white">
+            {id}
+          </span>
+        ))}
+      </div>
+      <p className="mt-3 text-xs leading-5 text-slate-600 dark:text-slate-400">{blueprint.rationale}</p>
+    </aside>
+  );
+}
+
+const ACTION_LABELS: Record<InterviewAgentDecision['action'], string> = {
+  FOLLOW_UP: '继续追问',
+  SWITCH_TOPIC: '切换方向',
+  ADJUST_DIFFICULTY: '调整难度',
+  END_INTERVIEW: '结束面试',
+};
+
+function InterviewDecisionCard({ decision }: { decision: InterviewAgentDecision }) {
+  return (
+    <motion.aside
+      initial={{ opacity: 0, y: -8 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="mb-4 overflow-hidden rounded-xl border border-slate-200 bg-slate-950 text-slate-100 shadow-lg shadow-slate-950/10 dark:border-slate-700"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 px-4 py-3">
+        <div className="flex items-center gap-2">
+          <BrainCircuit className="h-4 w-4 text-cyan-400" />
+          <span className="text-xs font-semibold tracking-[0.16em] text-slate-300">AGENT TURN DECISION</span>
+        </div>
+        <div className="flex items-center gap-2 text-xs">
+          <span className="inline-flex items-center gap-1 rounded-md bg-cyan-400/10 px-2 py-1 font-medium text-cyan-300">
+            <Gauge className="h-3.5 w-3.5" />
+            {decision.answerScore} 分
+          </span>
+          <span className="inline-flex items-center gap-1 rounded-md bg-amber-400/10 px-2 py-1 font-medium text-amber-300">
+            <GitBranch className="h-3.5 w-3.5" />
+            {ACTION_LABELS[decision.action]}
+          </span>
+          {decision.targetRequirementId && (
+            <span className="inline-flex items-center gap-1 rounded-md bg-slate-800 px-2 py-1 text-slate-300">
+              <Target className="h-3.5 w-3.5" />
+              {decision.targetRequirementId}
+            </span>
+          )}
+        </div>
+      </div>
+      <div className="grid gap-3 px-4 py-3 text-sm md:grid-cols-2">
+        <div>
+          <p className="mb-1 text-[11px] uppercase tracking-wider text-slate-500">回答反馈</p>
+          <p className="leading-6 text-slate-200">{decision.feedback}</p>
+        </div>
+        <div>
+          <p className="mb-1 text-[11px] uppercase tracking-wider text-slate-500">决策依据</p>
+          <p className="leading-6 text-slate-300">{decision.rationale}</p>
+        </div>
+      </div>
+    </motion.aside>
   );
 }

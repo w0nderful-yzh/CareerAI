@@ -99,17 +99,34 @@
 /* 自定义滚动条 */
 @layer utilities {
   .scrollbar-thin::-webkit-scrollbar {
-    @apply w-2 h-2;
+    width: 0.5rem;
+    height: 0.5rem;
   }
 
-    .scrollbar-thin::-webkit-scrollbar-track {
-    @apply bg-slate-100 rounded;
-        @apply dark:bg-slate-800;
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 0.25rem;
   }
 
-    .scrollbar-thin::-webkit-scrollbar-thumb {
-    @apply bg-slate-300 rounded hover:bg-slate-400;
-        @apply dark:bg-slate-600 dark:hover:bg-slate-500;
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 0.25rem;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+  }
+
+  .dark .scrollbar-thin::-webkit-scrollbar-track {
+    background: #1e293b;
+  }
+
+  .dark .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: #475569;
+  }
+
+  .dark .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background: #64748b;
   }
 }
 

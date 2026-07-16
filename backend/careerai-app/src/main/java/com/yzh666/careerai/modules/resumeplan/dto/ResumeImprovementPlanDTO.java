@@ -17,6 +17,7 @@ public record ResumeImprovementPlanDTO(
     List<String> projectUpgradeTasks,
     List<String> interviewPracticeTasks,
     List<String> learningTasks,
+    List<PreparationTaskDTO> preparationTasks,
     LocalDateTime createdAt
 ) {
 }

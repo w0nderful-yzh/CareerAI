@@ -34,5 +34,7 @@ public record CreateInterviewRequest(
 
     Long jobId,                            // 岗位ID（岗位驱动面试，可选）
 
-    Long matchReportId                     // 简历-岗位匹配报告ID（岗位驱动面试，可选）
+    Long matchReportId,                    // 简历-岗位匹配报告ID（岗位驱动面试，可选）
+
+    InterviewBlueprintDTO blueprint        // Agent 生成的结构化出题蓝图（可选）
 ) {}

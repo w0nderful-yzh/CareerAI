@@ -22,6 +22,7 @@
     <module>careerai-shared</module>
     <module>careerai-app</module>
     <module>knowledge-service</module>
+    <module>agent-service</module>
     <module>gateway-service</module>
   </modules>
 
