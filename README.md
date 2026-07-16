@@ -1,277 +1,330 @@
 # CareerAI
 
-CareerAI 是一个面向实习和校招场景的**岗位驱动自适应面试教练 Agent**。
+CareerAI 是一个面向实习与校招场景的 **Agent 驱动求职训练平台**。
 
-项目只聚焦两个相互反馈的核心方向：
+项目重点不是给传统系统增加一个聊天框，而是让 Agent 在受控边界内读取简历、岗位、匹配报告和历史能力画像，自主决定下一步，并直接调用 Java 业务能力完成创建任务、等待异步结果、增量出题和持久化。
 
-1. **简历–JD–规划**：基于简历证据和岗位要求生成可解释、可执行的准备计划。
-2. **自适应模拟面试**：根据 JD 权重、当前回答和历史能力画像动态决定追问、换题、难度与后续训练方向。
+当前项目收束为两条核心闭环：
 
-项目的目标不是增加一个聊天框，而是展示 Agent 如何调用 Java 业务能力、等待异步任务、根据真实结果决策，并把结果持久化为普通业务数据。
+- **简历–JD–规划**：从岗位要求和简历证据出发，生成可解释、可执行的准备计划。
+- **自适应模拟面试**：根据当前回答和跨场次能力画像，动态决定追问、换题、难度及结束时机。
 
-> 当前状态：两条核心主线已经形成可运行闭环。岗位准备支持证据矩阵、异步等待恢复和结构化任务；模拟面试支持跨场次蓝图、自适应决策、持久画像、结束总结和下一场复测。默认演示与验收步骤见 `docs/PROJECT-CLOSEOUT.md`。
+> 当前状态：核心闭环已完成，可作为 Java 后端工程能力与 Agent 应用开发能力的综合展示项目。演示步骤见 [项目收口说明](docs/PROJECT-CLOSEOUT.md)。
 
-## 项目定位
+## 项目亮点
+
+### 1. Agent 直接调用业务，而不是停留在问答
+
+Python Agent 通过 LangChain Structured Tools 调用 Java 内部业务接口，能够实际执行：
+
+- 查询用户简历、目标岗位和匹配报告；
+- 启动异步岗位匹配任务并等待结果；
+- 根据证据差距选择准备策略并创建改进计划；
+- 读取面试上下文和长期能力画像；
+- 创建面试蓝图、执行追问/换题/调难度/结束决策；
+- 将 Agent 结果保存为可再次查询的普通业务数据。
+
+所有写操作仍由 Java 完成权限校验、业务校验、事务控制和幂等处理。核心原则是：
+
+> **Java 是业务事实的唯一所有者，Python Agent 是业务能力的决策与编排者。**
+
+### 2. 证据驱动的简历–JD–规划
+
+系统不是只输出一个模糊的匹配分数，而是建立 JD 要求与简历证据矩阵：
+
+| 覆盖类型 | 含义 | 后续动作 |
+| --- | --- | --- |
+| `SUPPORTED` | 简历中存在可信证据 | 保留并强化表达 |
+| `EXPRESSION_GAP` | 具备经历但表达不充分 | 优化简历描述 |
+| `EVIDENCE_GAP` | 声称具备能力但缺少案例或指标 | 补充项目证据 |
+| `CAPABILITY_GAP` | 当前证据无法证明具备能力 | 学习并安排验证任务 |
+
+Agent 根据岗位要求的重要度、证据强度和缺口类型选择 `RESUME_FIRST`、`PROJECT_FIRST`、`INTERVIEW_FIRST` 或 `BALANCED` 策略，再调用 Java 创建带优先级、建议周期、验证方式和 JD 关联的准备任务。
+
+### 3. 真正自适应的增量面试
+
+Agent 会话只预生成首题，之后每轮都基于真实回答重新决策：
 
 ```mermaid
 flowchart LR
-    A["简历 + 目标 JD"] --> B["证据化匹配与差距分析"]
-    B --> C["岗位准备计划"]
-    C --> D["自适应模拟面试"]
-    D --> E["回答评分与弱点识别"]
-    E --> F["持久能力画像"]
-    F --> D
-    F --> C
+    A["读取当前题目、回答历史、JD 证据和能力画像"] --> B["Agent 多维评价当前回答"]
+    B --> C{"下一步决策"}
+    C -->|证据不足| D["继续追问"]
+    C -->|当前主题已充分| E["切换方向"]
+    C -->|难度不匹配| F["调整难度"]
+    C -->|达到目标或预算| G["结束面试"]
+    D --> H["Java 校验意图并生成最终问题"]
+    E --> H
+    F --> H
+    H --> A
 ```
 
-### 方向一：简历–JD–规划
+Python 只生成结构化 `NextQuestionIntent`，Java 再校验题型、难度、父题索引和真实 `requirementId`，并注入简历/JD 上下文生成最终题面，避免模型绕过业务规则。
 
-Agent 不只生成一段简历建议，而是围绕真实业务数据完成：
+面试还支持：
 
-- 解析 JD 的技能、项目、经验和隐性要求；
-- 从一份或多份简历中提取对应证据；
-- 区分“能力不足”和“简历缺少证据”；
-- 基于技能、项目和关键词证据选择更合适的简历；
-- 启动异步岗位匹配并等待结果；
-- 根据差距、重要程度和截止时间生成准备计划；
-- 使用后续面试表现修正计划。
+- 综合摸底、简历深挖、岗位定向、专项强化四种训练模式；
+- 技术正确性、深度、完整性、场景分析、项目掌握、排障、表达和岗位相关性多维评价；
+- 用户主动提示、讲解、跳过、继续和提前结束；
+- 跨会话首题主题去重，简历更新版本后仍继承已考历史；
+- 提示与讲解的 Markdown + Token 流式输出；
+- 下一题生成过程的 SSE 实时阶段反馈。
 
-目标输出不是聊天消息，而是可通过业务 API 查询的匹配报告、改进计划和岗位准备度报告。
+### 4. 可追溯的持久能力画像
 
-### 方向二：自适应模拟面试
+长期记忆不是无限保存聊天记录，而是由 Java 维护的结构化业务事实：
 
-模拟面试中的 Agent 决策主要体现在：
+- 每次有效回答形成不可变能力观察；
+- 同一场面试先聚合为一个样本，避免连续追问放大单场表现；
+- 跨场次投影为 `CANDIDATE`、`STABLE`、`CONFLICT` 状态；
+- 保存得分、置信度、趋势、证据片段、缺失点和最近验证时间；
+- 新一场面试优先复测低分、下降、冲突和未完成训练项；
+- 高分稳定项自动提升为场景设计或故障排查，而不是重复基础概念。
 
-- 从 JD 重点、简历项目和历史弱点中选择下一知识方向；
-- 根据当前回答决定继续追问、切换方向或调整难度；
-- 判断某项能力的证据是否充分，避免机械执行固定题单；
-- 对历史薄弱项进行跨场次复测，减少已经掌握内容的基础重复提问；
-- 面试结束后更新能力画像，并重新调整岗位准备计划。
+LangGraph Checkpoint 只负责当前 Agent Run 的恢复；能力画像负责跨 Run、跨面试的长期记忆，两者职责分离。
 
-文字面试是当前主线。语音、ASR 和 TTS 不进入核心验收范围。
+### 5. 可恢复、可审计的 Agent 执行链
 
-## 持久记忆
+- LangGraph 显式状态机，规划、等待、恢复和失败状态清晰可见；
+- RabbitMQ 执行岗位匹配异步任务，Agent 根据任务状态暂停并恢复；
+- Tool 调用携带 `X-Agent-Run-Id`、`X-Agent-Step-Id`；
+- 写 Tool 使用稳定 `Idempotency-Key`，防止网络重试造成重复业务数据；
+- 业务错误以结构化结果返回，前端可展示具体失败阶段；
+- 前端工作台展示执行计划、步骤状态、决策依据、证据和最终业务产物。
 
-CareerAI 的持久记忆不是无限保存聊天记录，也不等同于 LangChain Chat Memory。
+### 6. Java 与 AI 工程边界清晰
 
-长期记忆以 Java 业务数据的形式保存，包括：
+- 核心业务保持模块化单体，避免为了展示技术栈机械拆分微服务；
+- `Controller → Service → Repository` 分层，实体不直接暴露给接口；
+- 外部 LLM、S3 和 HTTP 调用不放在数据库事务中；
+- Spring AI Provider 访问统一收口在 `LlmProviderRegistry`；
+- 结构化输出统一通过 `StructuredOutputInvoker`；
+- Prompt 数据边界、用户资源隔离、内部服务令牌和 Tool 白名单共同限制 Agent 权限。
 
-- 目标岗位方向和 JD 能力权重；
-- 简历中的项目与技能证据；
-- 历史面试问题、回答评分和暴露弱点；
-- 各技能掌握程度、置信度和最近验证时间；
-- 已完成和待完成的岗位准备任务；
-- 同类问题的进步趋势。
-
-每条能力结论都应保留 `evidenceType`、`evidenceId`、`confidence` 和 `observedAt`。Python Agent 只能通过受控 Tool 读取或更新记忆，不能直接访问 Java 业务数据库。
-
-LangGraph Checkpoint 负责当前 Run 的执行恢复；能力画像负责跨 Run、跨面试的长期记忆，两者不能混用。
-
-## Agent 与 Java 的职责边界
-
-| 组件 | 负责 | 不负责 |
-| --- | --- | --- |
-| `careerai-app` | 用户、简历、岗位、匹配、面试、评分、能力画像、事务与业务规则 | 跨业务长流程编排 |
-| Java `backend/agent-service` | 内部令牌、模型配置桥接、Agent Tool 白名单和业务适配 | 保存 Agent 状态或直接持有业务表 |
-| Python `agent-service` | LangGraph 状态机、目标规划、工具选择、条件决策、等待和恢复 | 直接访问业务数据库 |
-| React 前端 | 创建任务、展示执行轨迹、进行模拟面试、查看画像和报告 | 在浏览器中执行 Agent 业务逻辑 |
-
-核心原则：**Java 是业务事实的唯一所有者，Python 是业务能力的编排者。**
-
-当前不引入多个子 Agent，也不使用多个模型互相讨论来代替业务执行。规划和面试可以实现为同一个 Agent 下的两个 LangGraph 子图。
-
-## 当前已实现
-
-### Java 后端
-
-- Java 21 Maven 聚合工程和模块化单体；
-- JWT 登录与用户数据隔离；
-- 简历上传、Tika 文本解析、结构化分析和对象存储；
-- 目标岗位、JD 解析、岗位匹配报告和简历改进计划；
-- JD 要求–简历证据矩阵，支持区分“已支撑”“表达缺口”“证据缺口”和“能力缺口”；
-- 带 P0/P1/P2 优先级、建议周期、验证方式和关联 JD 要求的准备任务；
-- 文字模拟面试、回答记录、评分和面试报告；
-- RabbitMQ 岗位匹配任务，支持 ACK、重试、死信和任务状态查询；
-- Spring AI 多 Provider 和结构化输出；
-- Java Agent 内部桥接、Tool 白名单、上下文透传和写操作幂等。
-
-### Python Agent
-
-- FastAPI 服务和 JWT 用户校验；
-- 从 Java 动态读取 Agent 默认模型配置；
-- LangChain 结构化业务 Tools；
-- LangGraph Run、Checkpoint 和恢复执行；
-- `简历 → 岗位 → 异步匹配 → 匹配报告 → 策略决策 → 改进计划` 首个业务闭环；
-- 模型根据匹配证据选择简历优先、项目优先、面试优先或均衡策略；
-- 决策节点优先读取高权重 JD 要求的证据缺口，不只依赖总分和摘要；
-- 策略决策通过受控参数影响 Java 计划生成，写操作仍由 Java 校验和持久化；
-- Run/Step 上下文、稳定幂等键和结构化业务错误；
-- `读取面试上下文 → 评估回答与决策 → Java 执行` 的自适应面试子图；
-- `读取简历/JD/匹配证据 → 规划面试蓝图 → Java 校验并创建会话` 的出题子图；
-- 蓝图明确训练模式、重点 JD 要求、强化主题、题型组合、回避主题和追问上限；
-
-### React 前端
-
-- 简历管理和岗位中心；
-- 文字模拟面试和面试记录；
-- Agent 任务执行台；
-- Agent 步骤状态、异步恢复、决策依据、Tool 选择、匹配报告和改进计划展示；
-- 证据矩阵和结构化准备任务看板；
-- 模拟面试实时显示本轮得分、反馈、Agent 动作、决策依据和关联 JD 要求；
-- 支持综合摸底、简历深挖、专项强化和岗位定向模式，并展示实际执行的面试蓝图；
-- 面试详情展示结束总结、真实证据、可执行改进任务和下一场复测建议；
-- Provider 管理和 Agent 默认模型切换。
-
-## 尚未完成
-
-- 高风险业务步骤仍由固定状态图和 Java 受控意图校验约束，模型不能自由执行任意接口；
-- 多份简历尚未根据岗位匹配证据进行并行比较；
-- 缺少面试结果反向修正规划的完整闭环；
-- 本地默认内存 Checkpoint，生产模式需要 PostgreSQL Checkpoint；
-- Run 历史、取消、人工重试、SSE 事件和完整 ToolCall 审计仍待补充。
-
-## 范围收束
-
-### 核心保留
-
-- 用户认证与资源隔离；
-- 简历上传、分析和证据提取；
-- JD、岗位和匹配；
-- 岗位准备计划；
-- 文字模拟面试与评分；
-- 持久能力画像；
-- Agent 工作台和岗位准备度报告；
-- 动态模型配置。
-
-### 可选扩展
-
-- `knowledge-service` 和个人知识库检索；
-- PostgreSQL + pgvector 的历史回答语义检索；
-- Nacos 服务发现；
-- 独立知识库/RAG 页面。
-
-这些代码可以保留作为历史实现或后续 Tool，但不属于默认产品入口和核心演示依赖。
-
-### 暂不继续
-
-- 投递过程管理和自动投递；
-- 复杂面试日历和外部日历同步；
-- 邮件、招聘网站和第三方账号连接；
-- ASR、TTS 和完整语音面试；
-- Multi-Agent、MCP 和长期聊天机器人；
-- HR 企业端、支付和运营系统；
-- 为展示技术栈继续拆分用户、简历、岗位或面试微服务。
-
-## 架构
+## 系统架构
 
 ```mermaid
 flowchart TB
-    WEB["React Web"] --> GW["gateway-service"]
-    GW --> APP["careerai-app<br/>Java 业务事实"]
-    GW --> PY["Python agent-service<br/>LangGraph 编排"]
-    PY --> JAGENT["Java agent-service<br/>内部 Tool 适配"]
-    JAGENT --> APP
+    WEB["React Web"] --> GW["gateway-service :8090"]
+
+    GW --> APP["careerai-app :8080<br/>核心业务模块化单体"]
+    GW --> PY["Python agent-service :8000<br/>LangGraph 决策与编排"]
+
+    PY --> BRIDGE["Java agent-service :8082<br/>受保护的 Tool 与模型配置桥接"]
+    BRIDGE --> APP
     PY --> LLM["LLM Provider"]
-    PY --> CP[("Agent Checkpoint")]
+    PY --> CHECKPOINT[("LangGraph Checkpoint")]
+
     APP --> PG[("PostgreSQL")]
-    APP --> MQ["RabbitMQ / Redis Stream"]
+    APP --> REDIS[("Redis")]
+    APP --> MQ["RabbitMQ"]
     APP --> OSS["RustFS / S3"]
 
-    OPTIONAL["knowledge-service / pgvector"] -.-> GW
-    OPTIONAL -.-> PY
+    KB["knowledge-service :8081<br/>可选 RAG 扩展"] -.-> GW
 ```
 
-默认演示保留模块化单体，不继续机械拆分微服务。`knowledge-service` 是可选扩展，不影响简历–JD–面试主链运行。
+### 组件职责
 
-## 技术栈
+| 组件 | 核心职责 | 明确不负责 |
+| --- | --- | --- |
+| `frontend` | 业务页面、Agent 执行轨迹、流式面试交互 | 在浏览器中执行 Agent 决策 |
+| `careerai-app` | 用户、简历、岗位、匹配、面试、画像、事务与持久化 | 跨业务长流程编排 |
+| Java `backend/agent-service` | 内部令牌校验、Tool 白名单、模型配置和业务适配 | 保存 Agent Run 或直接持有业务表 |
+| Python `agent-service` | LangGraph 状态机、规划、决策、等待与恢复 | 直接访问 Java 业务数据库 |
+| `gateway-service` | `/api/**` 统一入口和服务路由 | 业务逻辑 |
+| `knowledge-service` | 可选个人知识库与 RAG | 核心求职闭环的必需依赖 |
 
-### Java
+## 核心业务闭环
 
-- Java 21、Spring Boot、Spring AI
-- Spring Cloud Gateway、OpenFeign
-- PostgreSQL、Redis、RabbitMQ
-- JPA、Apache Tika、S3 兼容对象存储
-- Maven、JUnit 5
+### 简历–JD–规划
 
-### Python Agent
+```mermaid
+sequenceDiagram
+    participant U as 用户
+    participant P as Python Agent
+    participant T as Java Tool Bridge
+    participant J as careerai-app
+    participant Q as RabbitMQ
 
-- Python 3.12、uv、FastAPI、Pydantic
-- LangChain Tools
-- LangGraph StateGraph、Checkpoint、Runtime Context
-- HTTP 业务工具适配
+    U->>P: 选择简历和目标岗位
+    P->>T: 查询简历、岗位与历史上下文
+    T->>J: 读取当前用户业务数据
+    P->>T: 启动岗位匹配
+    T->>J: 创建异步匹配任务
+    J->>Q: 投递匹配消息
+    P->>T: 轮询任务状态
+    Q-->>J: 生成证据矩阵与匹配报告
+    T-->>P: 返回结构化匹配结果
+    P->>P: 选择准备策略与优先缺口
+    P->>T: 创建改进计划
+    T->>J: 校验并持久化计划
+    J-->>U: 展示证据、任务与准备建议
+```
 
-### 前端
+### 自适应模拟面试
 
-- React 18、TypeScript、Vite、Tailwind CSS
-- React Router、Axios、Framer Motion、Recharts
+1. 创建面试前读取简历、JD、匹配证据、长期画像和未完成任务；
+2. Agent 生成结构化面试蓝图，Java 过滤非法字段并创建会话；
+3. 用户回答后，Agent 评价回答并决定追问、换题、调难度或结束；
+4. Java 根据受控意图生成最终题面并保存问答与决策记录；
+5. 面试结束后异步生成报告、结束总结和改进任务；
+6. 能力观察投影为长期画像，参与下一场蓝图和下一轮岗位准备。
 
-## 目录
+## 项目结构
 
 ```text
 CareerAI/
-├── frontend/                         # React 前端
-├── agent-service/                    # Python Agent 编排
-├── backend/
-│   ├── careerai-shared/              # Java 公共契约与基础设施
-│   ├── careerai-app/                 # 核心业务模块化单体
-│   ├── agent-service/                # Java Agent 内部桥接
-│   ├── gateway-service/              # API 网关
-│   └── knowledge-service/            # 可选知识库/RAG 扩展
-└── docs/                              # 架构、迁移和设计文档
+├── frontend/                              # React 18 前端
+│   └── src/
+│       ├── api/                           # HTTP / SSE API 访问
+│       ├── components/                    # 面试、岗位、简历等复用组件
+│       ├── pages/                         # 页面级业务入口
+│       ├── hooks/                         # 面试配置与页面逻辑
+│       ├── types/                         # 前端共享类型
+│       └── utils/                         # Token、日期等工具
+│
+├── agent-service/                         # Python Agent 决策与编排服务
+│   ├── src/careerai_agent/
+│   │   ├── api/                           # FastAPI 路由、鉴权依赖、SSE
+│   │   ├── graph/                         # LangGraph 主图、面试图、创建图
+│   │   ├── services/                      # 规划器、策略决策、蓝图、面试决策
+│   │   ├── tools/                         # LangChain Tools、Java Client、契约模型
+│   │   ├── models/                        # 动态模型配置与 ChatModel 工厂
+│   │   ├── persistence/                   # Memory / PostgreSQL Checkpoint
+│   │   └── domain/                        # Agent Run 与请求模型
+│   ├── tests/                             # Python API 与业务编排测试
+│   ├── pyproject.toml                     # uv、依赖和质量规则
+│   └── uv.lock
+│
+├── backend/                               # Java 21 Maven 聚合工程
+│   ├── careerai-shared/                   # JWT、Result、异常、Agent Tool 契约等
+│   ├── careerai-app/                      # 核心业务模块化单体
+│   │   └── modules/
+│   │       ├── user/                      # 用户认证与隔离
+│   │       ├── resume/                    # 简历上传、解析与分析
+│   │       ├── job/                       # 目标岗位与 JD
+│   │       ├── jobmatch/                  # 证据矩阵与异步岗位匹配
+│   │       ├── resumeplan/                # 简历改进与准备任务
+│   │       ├── interview/                 # 增量面试、评价、画像与收尾
+│   │       ├── llmprovider/               # 动态模型 Provider 管理
+│   │       └── agenttool/                 # 核心业务 Tool 实现
+│   ├── agent-service/                     # Java 内部 Tool / 配置桥接
+│   ├── gateway-service/                   # Spring Cloud Gateway MVC
+│   └── knowledge-service/                 # 可选知识库 / RAG 服务
+│
+├── docs/                                  # 架构、边界、迁移与收口文档
+│   └── sql/                               # PostgreSQL 增量迁移脚本
+├── scripts/
+│   ├── dev-start.sh                       # 启动默认演示主链
+│   └── smoke-test.sh                      # 服务就绪检查
+├── .env.example
+└── README.md
 ```
 
-仓库根目录的 `agent-service/` 是 Python 编排服务；`backend/agent-service/` 是 Java 内部桥接服务，两者职责不同。
+注意：仓库根目录的 `agent-service/` 是 Python 编排服务；`backend/agent-service/` 是 Java 内部桥接服务。
+
+## 已实现功能
+
+### 求职准备
+
+- 简历上传、Apache Tika 文本解析、S3 兼容对象存储；
+- 简历结构化分析和历史版本管理；
+- 目标岗位维护与 JD 解析；
+- RabbitMQ 异步岗位匹配；
+- JD 要求–简历证据矩阵；
+- 匹配报告、简历改进计划和结构化准备任务；
+- Agent 工作台展示执行步骤、决策依据和产物。
+
+### 自适应面试
+
+- 四种训练模式与结构化面试蓝图；
+- 首题候选生成和跨会话主题去重；
+- 基于回答的增量出题、追问、换题和难度调整；
+- 用户控制意图识别和提前结束；
+- 多维单轮评价、完整/部分面试报告；
+- 持久能力观察、画像投影和趋势；
+- 结束总结、改进任务和下一场复测建议；
+- Markdown 消息渲染、Token 流式讲解和 SSE 执行阶段反馈。
+
+### 平台能力
+
+- JWT 登录和用户级资源隔离；
+- 多 LLM Provider 配置、测试与默认模型切换；
+- Java Agent 内部访问令牌和 Tool 白名单；
+- 幂等写入、结构化业务错误和异步重试；
+- Gateway 统一路由；
+- 可选知识库与 RAG 扩展。
+
+## 技术栈
+
+| 层次 | 技术 |
+| --- | --- |
+| Java | Java 21、Spring Boot、Spring AI、Spring Cloud Gateway MVC、OpenFeign、JPA |
+| Agent | Python 3.12、uv、FastAPI、Pydantic、LangChain、LangGraph |
+| Frontend | React 18、TypeScript、Vite、Tailwind CSS、Framer Motion、React Markdown |
+| Data | PostgreSQL、Redis、RabbitMQ、RustFS / S3 |
+| Quality | Maven、JUnit 5、Pytest、Ruff、Mypy、pnpm、TypeScript |
 
 ## 本地启动
 
-依赖已安装、基础设施已启动时，可以从仓库根目录一键启动默认演示主链：
+### 1. 基础设施
 
-```bash
-./scripts/dev-start.sh
-```
-
-脚本只启动 `careerai-app`、Java Agent 桥接、Python Agent、Gateway 和 React，
-不会启动可选的 `knowledge-service`。另开终端可执行以下就绪检查：
-
-```bash
-./scripts/smoke-test.sh
-```
-
-### 必需基础设施
-
-| 能力 | 默认端口 | 用途 |
+| 服务 | 默认端口 | 用途 |
 | --- | --- | --- |
-| PostgreSQL | `5432` | 核心业务数据和可选 Agent Checkpoint |
-| Redis | `6379` | 现有异步分析和缓存 |
-| RabbitMQ | `5672/15672` | 岗位匹配异步任务 |
-| RustFS / S3 | `9000/9001` | 简历文件存储 |
+| PostgreSQL | `5432` | 核心业务数据和可选 Checkpoint |
+| Redis | `6379` | 会话缓存与异步流 |
+| RabbitMQ | `5672 / 15672` | 岗位匹配任务 |
+| RustFS / S3 | `9000 / 9001` | 简历文件存储 |
 
-Nacos 和 `knowledge-service` 不属于默认演示依赖。使用本地固定路由时可设置：
-
-```env
-NACOS_DISCOVERY_ENABLED=false
-NACOS_REGISTER_ENABLED=false
-APP_RABBITMQ_ENABLED=true
-```
-
-复制本地配置并确保 Java 核心、Java Agent 桥接和 Python Agent 使用相同的 `AGENT_INTERNAL_SERVICE_TOKEN`：
+Nacos 和 `knowledge-service` 不是默认演示依赖。复制配置并确保三个 Agent 相关服务使用同一个内部令牌：
 
 ```bash
 cp .env.example .env
 sdk env
 ```
 
-### 启动 Java
+关键配置：
+
+```env
+NACOS_DISCOVERY_ENABLED=false
+NACOS_REGISTER_ENABLED=false
+APP_RABBITMQ_ENABLED=true
+AGENT_INTERNAL_SERVICE_TOKEN=replace-with-the-same-local-token
+```
+
+### 2. 一键启动默认主链
+
+```bash
+./scripts/dev-start.sh
+```
+
+该脚本启动：
+
+- `careerai-app`
+- Java `agent-service`
+- Python `agent-service`
+- `gateway-service`
+- React 前端
+
+就绪检查：
+
+```bash
+./scripts/smoke-test.sh
+```
+
+### 3. 分别启动
+
+Java：
 
 ```bash
 cd backend
-mvn clean test
+mvn clean install
 mvn -pl careerai-app spring-boot:run
 mvn -pl agent-service spring-boot:run
 mvn -pl gateway-service spring-boot:run
 ```
 
-### 启动 Python Agent
+Python Agent：
 
 ```bash
 cd agent-service
@@ -280,7 +333,7 @@ cp .env.example .env
 uv run uvicorn careerai_agent.main:app --reload --port 8000
 ```
 
-### 启动前端
+前端：
 
 ```bash
 cd frontend
@@ -289,7 +342,7 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-默认地址：
+### 4. 服务地址
 
 | 服务 | 地址 |
 | --- | --- |
@@ -299,153 +352,73 @@ pnpm dev
 | Java Agent 桥接 | `http://localhost:8082` |
 | Python Agent | `http://localhost:8000` |
 
-Gateway 默认路由：
+Gateway 路由：
 
 - `/api/agent/**` → Python Agent `8000`
+- `/api/knowledgebase/**`、`/api/rag-chat/**` → 可选 Knowledge Service `8081`
 - 其他 `/api/**` → Java 核心 `8080`
-- 知识库接口仅在可选 `knowledge-service` 启动时使用
 
-## 当前 Agent Tool
+## 推荐演示路径
 
-首批 Tool 通过 Java `backend/agent-service` 的 `/internal/agent/tools/**` 暴露：
+### 路径一：简历–JD–规划
 
-- 查询简历列表和简历详情；
-- 查询目标岗位；
-- 创建和查询岗位匹配任务；
-- 查询岗位匹配报告；
-- 根据 Agent 的准备策略创建简历改进计划，并查询已保存计划；
-- 读取面试单轮上下文，并执行 Agent 的追问、换题、调难度或结束决策。
-- 按 Agent 的结构化面试蓝图幂等创建面试 Session，并在每轮回答后增量生成下一题。
-- 创建新面试前读取跨场次画像、未完成任务和待验证项。
+1. 上传并分析一份简历；
+2. 在“目标岗位”中录入 JD；
+3. 启动岗位匹配，查看要求–证据矩阵；
+4. 进入 Agent 工作台，观察异步等待、策略决策和 Tool 执行；
+5. 查看落库后的改进计划和准备任务。
 
-Tool 调用必须携带用户 JWT、`X-Agent-Run-Id` 和 `X-Agent-Step-Id`；写 Tool 额外使用稳定 `Idempotency-Key`。
+### 路径二：自适应模拟面试
 
-## 聚焦路线图
+1. 选择已有简历和目标岗位；
+2. 选择综合摸底、简历深挖、岗位定向或专项强化；
+3. 回答问题，观察 Agent 的评分、动作、依据及下一题变化；
+4. 请求提示或讲解，查看 Markdown 流式输出；
+5. 结束面试，查看能力画像、改进任务和下一场复测建议；
+6. 再次创建面试，验证历史弱点复测和已掌握主题升难度。
 
-### 模拟面试优化六阶段
-
-后续模拟面试按以下六个阶段逐步交付，每个阶段都必须形成可运行、可测试的纵向闭环，
-不把尚未具备证据基础的模型结论直接写入长期画像。
-
-1. **面试过程数据与多维评价（已完成）**
-   - [x] 将问题和回答轮次规范化保存，保留问题来源、难度、阶段与 Agent 决策；
-   - [x] 每轮分别评价技术正确性、深度、完整性、场景分析、项目掌握、故障定位、表达和岗位相关性；
-   - [x] 保存结束原因、完整/部分评价、已覆盖目标和未验证目标；
-   - [x] 报告只评价实际回答过的问题，并让关键结论能追溯到问答证据。
-2. **用户意图与结束流程（已完成）**
-   - [x] 区分正常回答、结束面试、跳过、请求提示、请求讲解和继续面试；
-   - [x] 用户明确结束时不再把结束语当作答案评分；
-   - [x] 显式操作优先，简短文本控制语句兜底，正常技术回答仍进入多维评价；
-   - [x] 主动结束与自然结束统一收尾，重复结束请求不会重复触发评估。
-3. **增量出题（已完成）**
-   - [x] Agent 会话创建时只生成首题，题目数表示整场面试轮次预算；
-   - [x] Agent 结合当前回答、历史问答、蓝图和证据矩阵生成结构化 `NextQuestionIntent`；
-   - [x] Java 校验题型、难度、追问父题和真实 requirementId，再注入简历/JD 上下文生成最终问题；
-   - [x] 最终问题追加到会话和规范化题目表，Redis 过期后可通过数据库快照恢复出题上下文。
-4. **持久能力画像（已完成）**
-   - [x] 每个有效回答幂等追加技术、项目和表达维度的不可变观察；
-   - [x] Java 按跨会话证据投影 `CANDIDATE` / `STABLE` / `CONFLICT` 画像和趋势；
-   - [x] 同一场面试先聚合成一个样本，连续追问不会把单场表现放大为稳定结论；
-   - [x] 冲突证据保留历史并降低置信度，每个画像项都能追溯到最新会话、问题和回答片段；
-   - [x] Agent 的单轮面试上下文包含长期画像，可优先复测薄弱、下降或冲突项。
-5. **结束编排、总结与改进任务（已完成）**
-   - [x] 最终报告保存后自动生成可追溯总结、真实作答弱项、关键证据和下次面试建议；
-   - [x] 从单轮 `errors` / `missingPoints` 生成带优先级、验证方式和证据来源的改进任务；
-   - [x] 总结与任务分别使用稳定幂等键，异步评估重试不会重复创建结束产物；
-   - [x] 提前结束明确标记为部分评价，未考察目标只作为“待验证（非弱项）”保留。
-6. **跨场次闭环与评测（已完成）**
-   - [x] 新面试创建前通过只读业务 Tool 加载长期画像、趋势、未完成任务和最近待验证项；
-   - [x] 蓝图确定性安排任务复测、低分/下降项复测、`CONFLICT` 换场景复核；
-   - [x] 高分 `STABLE` 项自动使用场景设计和故障排查题升难度，避免重复基础概念题；
-   - [x] 未验证目标保持“待验证（非弱项）”语义，不污染长期弱项结论；
-   - [x] 固定场景测试覆盖未完成任务、未验证目标、冲突画像和稳定优势升难度。
-
-第一阶段数据库迁移：`docs/sql/20260716-add-interview-turn-foundation.sql`。历史会话继续从
-`questions_json` 兼容读取，新创建会话同时写入规范化问题表。
-第三阶段数据库迁移：`docs/sql/20260716-add-incremental-interview-generation.sql`。
-第四阶段数据库迁移：`docs/sql/20260716-add-persistent-ability-profile.sql`。
-当前用户画像可通过 `GET /api/interview/ability-profile` 查询。
-第五阶段数据库迁移：`docs/sql/20260716-add-interview-closure-tasks.sql`。
-报告生成后的结束总结和改进任务可通过
-`GET /api/interview/sessions/{sessionId}/closure` 查询。
-新面试创建图会先调用内部只读 Tool `GET /internal/agent/tools/interview-planning-context`，
-再将跨场次事实与简历、JD、匹配报告和用户主动强化要求共同交给蓝图 Agent。
-
-实现仍遵守“Python 负责 Agent 决策，Java 负责业务事实、校验、事务、幂等和持久化”
-的边界。
-
-### 阶段 0：Agent 业务调用骨架
-
-- [x] Java/Python Agent 服务边界；
-- [x] 动态模型配置；
-- [x] 结构化业务 Tools；
-- [x] 异步岗位匹配、Checkpoint 和恢复；
-- [x] 简历改进计划产物；
-- [x] 基于匹配证据的结构化策略决策；
-- [x] Agent 任务执行台。
-
-### 阶段 1：证据化简历–JD–规划（进行中）
-
-- [x] 用结构化决策统一策略、证据、优先缺口和 Tool 输入；
-- [x] 建立 JD 要求与简历证据矩阵；
-- [ ] 多份简历并行匹配并根据证据选择；
-- [x] 区分已支撑、表达缺口、证据缺口和能力缺口；
-- [x] 形成带优先级、建议周期、验证方式和 JD 关联的岗位准备任务。
-
-> 新增字段只在重新执行岗位匹配和重新生成改进计划后产生；历史报告和历史计划会以空列表兼容返回。本地旧数据库可执行 `docs/sql/20260716-add-evidence-matrix-and-preparation-tasks.sql` 补齐字段。
-
-### 阶段 2：自适应模拟面试
-
-- [x] 将面试上下文读取和单轮决策执行封装为 Agent Tools；
-- [x] 根据 JD 证据、当前回答和历史问答决定下一题意图；
-- [x] 支持追问、换题、难度调整和结束动作，并由 Java 验证意图后增量出题；
-- [x] 综合简历、JD、证据矩阵和用户强化要求规划结构化出题蓝图；
-- [x] 由 Java 过滤非法 requirementId、校验蓝图并持久化实际执行结果；
-- [ ] 将面试 Session 与岗位准备 Agent Run 关联。
-
-> 本地旧数据库需执行 `docs/sql/20260716-add-interview-blueprint.sql`，补充蓝图和 Agent 创建幂等键字段。
-
-### 阶段 3：持久能力画像（核心投影已完成）
-
-- [x] 建立带证据、置信度和时间的技能画像；
-- [x] 从面试评分中提取候选、稳定和冲突结论；
-- [x] 跨面试避免重复已掌握的基础题，并改用更复杂场景验证；
-- [x] 根据历史表现、趋势、冲突证据和未完成任务安排复测；
-- [ ] 根据时间衰减安排间隔复测；
-- [x] 支持用户查看带最新证据的能力画像；
-- [ ] 支持用户纠正画像结论。
-
-### 阶段 4：闭环与评测
-
-- [x] 使用固定场景验证跨场次任务复测、冲突复核、岗位隔离和优势升难度；
-- [ ] 面试结束后自动修正岗位准备计划；
-- [ ] 生成岗位准备度和进步趋势报告；
-- [ ] 使用固定场景评测规划准确率、问题选择和弱点修复效果；
-- [ ] 验证越权、重复写入、服务重启和故障恢复；
-- [ ] 完成 Run、Step、ToolCall 和 Memory Update 审计。
-
-## 验收标准
-
-项目最终需要证明：
-
-1. Agent 能从简历和 JD 中生成带原文证据的岗位准备计划；
-2. Agent 能根据 JD、当前回答和历史画像自主决定追问、换题或调整难度；
-3. 至少包含一个异步业务任务的等待和恢复；
-4. 面试结果能够形成跨 Session 持久的能力画像；
-5. 下一次面试会主动验证历史弱点，减少无意义重复；
-6. 面试结果能够反向更新岗位准备计划；
-7. 所有关键结论都能追溯到简历、JD 或历史回答。
-
-## 验证命令
+## 验证
 
 ```bash
+# Java 全模块
 cd backend && mvn test
-cd agent-service && uv run pytest && uv run ruff check src tests && uv run mypy src
+
+# Python Agent
+cd agent-service
+uv run pytest
+uv run ruff check src tests
+uv run mypy src
+
+# React
 cd frontend && pnpm build
 ```
+
+## 项目边界
+
+为了保证简历项目的完整度和可解释性，当前明确不继续扩展：
+
+- 自动投递和招聘网站账号连接；
+- 邮件、日历和第三方办公平台集成；
+- ASR、TTS 和完整语音面试；
+- Multi-Agent 互相讨论式架构；
+- 为展示技术栈继续拆分用户、简历、岗位或面试微服务。
+
+后续若继续迭代，优先级较高的方向是：
+
+- 面试结果自动修正岗位准备计划；
+- 多份简历基于岗位证据并行比较；
+- 时间衰减与间隔复测；
+- 更完整的 Run / Step / ToolCall / Memory Update 审计；
+- 固定评测集与规划准确率、问题选择质量评估。
+
+## 相关文档
+
+- [项目收口与演示说明](docs/PROJECT-CLOSEOUT.md)
+- [Agent 化改造方案](docs/CareerAI-Agent化改造方案.md)
+- [改造工作清单](docs/CareerAI-改造工作清单.md)
+- [数据库边界](docs/database-boundaries.md)
+- [数据库迁移脚本](docs/sql)
 
 ## 上游与许可证
 
 本项目基于 [Snailclimb/interview-guide](https://github.com/Snailclimb/interview-guide) 修改。上游项目使用 AGPL-3.0 License；本仓库保留原许可证、上游来源和修改说明，详见 [NOTICE.md](NOTICE.md)。
-
-项目完成前，请勿将尚未实现或未验证的目标能力作为已完成成果写入简历。
