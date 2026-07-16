@@ -106,6 +106,9 @@ spring:
       on-client-errors: false
 # Application custom configuration
 app:
+  agent:
+    internal:
+      service-token: ${AGENT_INTERNAL_SERVICE_TOKEN:}
   auth:
     jwt-secret: ${APP_AUTH_JWT_SECRET:careerai-dev-jwt-secret-change-me-at-least-32}
     access-token-ttl-minutes: ${APP_AUTH_ACCESS_TOKEN_TTL_MINUTES:120}
@@ -116,6 +119,7 @@ app:
   ai:
     default-provider: dashscope
     default-embedding-provider: dashscope
+    default-agent-provider: ${APP_AI_DEFAULT_AGENT_PROVIDER:dashscope}
     embedding-dimensions: ${APP_AI_EMBEDDING_DIMENSIONS:1024}
     security:
       api-key-encryption-key: ${APP_AI_CONFIG_ENCRYPTION_KEY:}

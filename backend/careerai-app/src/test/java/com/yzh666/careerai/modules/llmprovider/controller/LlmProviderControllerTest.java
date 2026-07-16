@@ -65,4 +65,15 @@ class LlmProviderControllerTest {
         assertEquals(200, result.getCode());
         verify(configService).deleteProvider("lmstudio");
     }
+
+    @Test
+    @DisplayName("updateDefaultAgentProvider 调用 service")
+    void updateDefaultAgentProviderCallsService() {
+        DefaultProviderDTO request = new DefaultProviderDTO(null, null, "glm");
+
+        Result<Void> result = controller.updateDefaultAgentProvider(request);
+
+        assertEquals(200, result.getCode());
+        verify(configService).updateDefaultAgentProvider(request);
+    }
 }

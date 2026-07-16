@@ -68,7 +68,15 @@ public class LlmProviderBootstrapService {
   }
 
   private void ensureGlobalSetting() {
-    if (globalSettingRepository.existsById(LlmGlobalSettingEntity.SINGLETON_ID)) {
+    LlmGlobalSettingEntity existing = globalSettingRepository
+        .findById(LlmGlobalSettingEntity.SINGLETON_ID)
+        .orElse(null);
+    if (existing != null) {
+      if (isBlank(existing.getDefaultAgentProviderId())) {
+        existing.setDefaultAgentProviderId(existing.getDefaultChatProviderId());
+        globalSettingRepository.save(existing);
+        log.info("Backfilled default Agent provider: {}", existing.getDefaultAgentProviderId());
+      }
       return;
     }
     String defaultChatProvider = resolveExistingProvider(
@@ -79,14 +87,19 @@ public class LlmProviderBootstrapService {
         ? properties.getDefaultEmbeddingProvider()
         : defaultChatProvider;
     String defaultEmbeddingProvider = resolveExistingEmbeddingProvider(configuredEmbeddingProvider, defaultChatProvider);
+    String configuredAgentProvider = !isBlank(properties.getDefaultAgentProvider())
+        ? properties.getDefaultAgentProvider()
+        : defaultChatProvider;
+    String defaultAgentProvider = resolveExistingProvider(configuredAgentProvider, defaultChatProvider);
 
     globalSettingRepository.save(LlmGlobalSettingEntity.builder()
         .id(LlmGlobalSettingEntity.SINGLETON_ID)
         .defaultChatProviderId(defaultChatProvider)
         .defaultEmbeddingProviderId(defaultEmbeddingProvider)
+        .defaultAgentProviderId(defaultAgentProvider)
         .build());
-    log.info("Initialized LLM global setting: chatProvider={}, embeddingProvider={}",
-        defaultChatProvider, defaultEmbeddingProvider);
+    log.info("Initialized LLM global setting: chatProvider={}, embeddingProvider={}, agentProvider={}",
+        defaultChatProvider, defaultEmbeddingProvider, defaultAgentProvider);
   }
 
   private String resolveExistingProvider(String preferredProvider, String fallbackProvider) {

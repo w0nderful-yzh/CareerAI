@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Settings, Plus, Trash2, Plug, CheckCircle, XCircle,
-  Loader2, Eye, EyeOff, RefreshCw, Server, Edit2, ChevronDown, Database,
+  Loader2, Eye, EyeOff, RefreshCw, Server, Edit2, ChevronDown, Database, Bot,
 } from 'lucide-react';
 import { llmProviderApi } from '../api/llmProvider';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -141,6 +141,7 @@ export default function SettingsPage() {
   const [providers, setProviders] = useState<ProviderItem[]>([]);
   const [defaultProviderId, setDefaultProviderId] = useState('');
   const [defaultEmbeddingProviderId, setDefaultEmbeddingProviderId] = useState('');
+  const [defaultAgentProviderId, setDefaultAgentProviderId] = useState('');
   const [loading, setLoading] = useState(true);
 
   // Modal state
@@ -176,8 +177,10 @@ export default function SettingsPage() {
   const [deleting, setDeleting] = useState(false);
   const [pendingDefaultProviderId, setPendingDefaultProviderId] = useState<string | null>(null);
   const [pendingDefaultEmbeddingProviderId, setPendingDefaultEmbeddingProviderId] = useState<string | null>(null);
+  const [pendingDefaultAgentProviderId, setPendingDefaultAgentProviderId] = useState<string | null>(null);
   const [settingDefault, setSettingDefault] = useState(false);
   const [settingEmbeddingDefault, setSettingEmbeddingDefault] = useState(false);
+  const [settingAgentDefault, setSettingAgentDefault] = useState(false);
 
   const pendingEmbeddingProvider = useMemo(
     () => providers.find(provider => provider.id === pendingDefaultEmbeddingProviderId) ?? null,
@@ -200,6 +203,10 @@ export default function SettingsPage() {
     defaultEmbeddingProviderId === providerId
   ), [defaultEmbeddingProviderId]);
 
+  const isDefaultAgentProvider = useCallback((providerId: string) => (
+    defaultAgentProviderId === providerId
+  ), [defaultAgentProviderId]);
+
   const loadData = useCallback(async () => {
     try {
       const [providerList, defaultProvider] = await Promise.all([
@@ -209,6 +216,7 @@ export default function SettingsPage() {
       setProviders(providerList);
       setDefaultProviderId(defaultProvider.defaultProvider);
       setDefaultEmbeddingProviderId(defaultProvider.defaultEmbeddingProvider);
+      setDefaultAgentProviderId(defaultProvider.defaultAgentProvider);
     } catch (err) {
       console.error('Failed to load settings:', err);
       showToast('加载数据失败', 'error');
@@ -397,6 +405,7 @@ export default function SettingsPage() {
       await llmProviderApi.updateDefaultProvider({
         defaultProvider: pendingDefaultProviderId,
         defaultEmbeddingProvider: defaultEmbeddingProviderId,
+        defaultAgentProvider: defaultAgentProviderId,
       });
       showToast(`已将 "${pendingDefaultProviderId}" 设为默认聊天服务`);
       setPendingDefaultProviderId(null);
@@ -426,6 +435,7 @@ export default function SettingsPage() {
       await llmProviderApi.updateDefaultEmbeddingProvider({
         defaultProvider: defaultProviderId,
         defaultEmbeddingProvider: pendingDefaultEmbeddingProviderId,
+        defaultAgentProvider: defaultAgentProviderId,
       });
       showToast(`已将 "${pendingDefaultEmbeddingProviderId}" 的 ${pendingEmbeddingProvider?.embeddingModel ?? '向量模型'} (${pendingEmbeddingProvider?.embeddingDimensions ?? 1024}维) 设为默认向量服务`);
       setPendingDefaultEmbeddingProviderId(null);
@@ -435,6 +445,28 @@ export default function SettingsPage() {
       showToast(err instanceof Error ? err.message : '设置默认向量 Provider 失败', 'error');
     } finally {
       setSettingEmbeddingDefault(false);
+    }
+  };
+
+  const handleConfirmSetAgentDefault = async () => {
+    if (!pendingDefaultAgentProviderId) {
+      return;
+    }
+    setSettingAgentDefault(true);
+    try {
+      await llmProviderApi.updateDefaultAgentProvider({
+        defaultProvider: defaultProviderId,
+        defaultEmbeddingProvider: defaultEmbeddingProviderId,
+        defaultAgentProvider: pendingDefaultAgentProviderId,
+      });
+      showToast(`已将 "${pendingDefaultAgentProviderId}" 设为 Agent 默认模型`);
+      setPendingDefaultAgentProviderId(null);
+      await loadData();
+    } catch (err) {
+      console.error('Failed to set Agent default:', err);
+      showToast(err instanceof Error ? err.message : '设置 Agent 默认 Provider 失败', 'error');
+    } finally {
+      setSettingAgentDefault(false);
     }
   };
 
@@ -505,6 +537,7 @@ export default function SettingsPage() {
                   {providers.map((provider, index) => {
                     const isGlobalDefault = isGlobalDefaultProvider(provider.id);
                     const isEmbeddingDefault = isDefaultEmbeddingProvider(provider.id);
+                    const isAgentDefault = isDefaultAgentProvider(provider.id);
                     const canUseEmbedding = provider.supportsEmbedding && !!provider.embeddingModel;
 
                     return (
@@ -534,6 +567,9 @@ export default function SettingsPage() {
                           )}
                           {isEmbeddingDefault && (
                             <StatusBadge icon={<Database className="h-3 w-3" />}>向量默认</StatusBadge>
+                          )}
+                          {isAgentDefault && (
+                            <StatusBadge icon={<Bot className="h-3 w-3" />}>Agent 默认</StatusBadge>
                           )}
                         </div>
                       </div>
@@ -625,6 +661,15 @@ export default function SettingsPage() {
                         >
                           <Database className="w-3.5 h-3.5" />
                           设为向量
+                        </button>
+                        <button
+                          onClick={() => setPendingDefaultAgentProviderId(provider.id)}
+                          disabled={isAgentDefault || settingAgentDefault}
+                          className={`${ACTION_BUTTON_CLASS} text-violet-600 hover:bg-violet-50 dark:text-violet-400 dark:hover:bg-violet-900/20 disabled:hover:bg-transparent dark:disabled:hover:bg-transparent`}
+                          title="设为 Agent 动态规划默认模型"
+                        >
+                          <Bot className="w-3.5 h-3.5" />
+                          设为 Agent
                         </button>
                         <button
                           onClick={() => setDeleteConfirmId(provider.id)}
@@ -988,6 +1033,21 @@ export default function SettingsPage() {
         onCancel={() => {
           if (!settingEmbeddingDefault) {
             setPendingDefaultEmbeddingProviderId(null);
+          }
+        }}
+      />
+
+      <ConfirmDialog
+        open={pendingDefaultAgentProviderId !== null}
+        title="设为 Agent 默认模型"
+        message={`确定要将 "${pendingDefaultAgentProviderId ?? ''}" 设为 Agent 规划模型吗？Python Agent 会在下一个 Run 自动读取新配置，无需重启。`}
+        confirmText="确认设置"
+        cancelText="取消"
+        loading={settingAgentDefault}
+        onConfirm={handleConfirmSetAgentDefault}
+        onCancel={() => {
+          if (!settingAgentDefault) {
+            setPendingDefaultAgentProviderId(null);
           }
         }}
       />

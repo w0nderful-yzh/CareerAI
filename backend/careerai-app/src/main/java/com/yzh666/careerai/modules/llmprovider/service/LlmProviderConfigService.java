@@ -2,6 +2,7 @@ package com.yzh666.careerai.modules.llmprovider.service;
 
 import com.yzh666.careerai.common.ai.ApiPathResolver;
 import com.yzh666.careerai.common.ai.LlmProviderRegistry;
+import com.yzh666.careerai.common.agent.AgentModelRuntimeConfig;
 import com.yzh666.careerai.common.config.LlmProviderProperties;
 import com.yzh666.careerai.common.config.LlmProviderProperties.ProviderConfig;
 import com.yzh666.careerai.common.exception.BusinessException;
@@ -40,6 +41,7 @@ import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
@@ -138,6 +140,7 @@ public class LlmProviderConfigService {
                 .temperature(e.getValue().getTemperature())
                 .defaultChatProvider(e.getKey().equals(properties.getDefaultProvider()))
                 .defaultEmbeddingProvider(e.getKey().equals(properties.getDefaultEmbeddingProvider()))
+                .defaultAgentProvider(e.getKey().equals(resolveLegacyAgentProviderId()))
                 .build())
             .toList();
       }
@@ -154,6 +157,7 @@ public class LlmProviderConfigService {
               .temperature(provider.getTemperature())
               .defaultChatProvider(provider.getId().equals(setting.getDefaultChatProviderId()))
               .defaultEmbeddingProvider(provider.getId().equals(setting.getDefaultEmbeddingProviderId()))
+              .defaultAgentProvider(provider.getId().equals(resolveAgentProviderId(setting)))
               .build())
           .toList();
     } finally {
@@ -178,6 +182,7 @@ public class LlmProviderConfigService {
             .temperature(config.getTemperature())
             .defaultChatProvider(id.equals(properties.getDefaultProvider()))
             .defaultEmbeddingProvider(id.equals(properties.getDefaultEmbeddingProvider()))
+            .defaultAgentProvider(id.equals(resolveLegacyAgentProviderId()))
             .build();
       }
       LlmGlobalSettingEntity setting = getGlobalSettingOrThrow();
@@ -193,6 +198,7 @@ public class LlmProviderConfigService {
           .temperature(provider.getTemperature())
           .defaultChatProvider(id.equals(setting.getDefaultChatProviderId()))
           .defaultEmbeddingProvider(id.equals(setting.getDefaultEmbeddingProviderId()))
+          .defaultAgentProvider(id.equals(resolveAgentProviderId(setting)))
           .build();
     } finally {
       rwLock.readLock().unlock();
@@ -203,12 +209,16 @@ public class LlmProviderConfigService {
     rwLock.readLock().lock();
     try {
       if (!isDatabaseBacked()) {
-        return new DefaultProviderDTO(properties.getDefaultProvider(), properties.getDefaultEmbeddingProvider());
+        return new DefaultProviderDTO(
+            properties.getDefaultProvider(),
+            properties.getDefaultEmbeddingProvider(),
+            resolveLegacyAgentProviderId());
       }
       LlmGlobalSettingEntity setting = getGlobalSettingOrThrow();
       return new DefaultProviderDTO(
           setting.getDefaultChatProviderId(),
-          setting.getDefaultEmbeddingProviderId());
+          setting.getDefaultEmbeddingProviderId(),
+          resolveAgentProviderId(setting));
     } finally {
       rwLock.readLock().unlock();
     }
@@ -221,6 +231,58 @@ public class LlmProviderConfigService {
           ? getProviderRuntimeConfigOrThrow(id)
           : toRuntimeConfig(getLegacyProviderConfigOrThrow(id));
       return doTestProvider(config, id);
+    } finally {
+      rwLock.readLock().unlock();
+    }
+  }
+
+  /**
+   * Returns the decrypted runtime snapshot for the protected internal Agent endpoint only.
+   */
+  public AgentModelRuntimeConfig getAgentModelRuntimeConfig() {
+    rwLock.readLock().lock();
+    try {
+      if (!isDatabaseBacked()) {
+        String providerId = resolveLegacyAgentProviderId();
+        ProviderConfig config = getLegacyProviderConfigOrThrow(providerId);
+        String apiKey = requireAgentApiKey(providerId, config.getApiKey());
+        String version = Integer.toUnsignedString(Objects.hash(
+            providerId,
+            config.getBaseUrl(),
+            apiKey,
+            config.getModel(),
+            config.getTemperature()
+        ));
+        return new AgentModelRuntimeConfig(
+            providerId,
+            ApiPathResolver.resolveVersionedBaseUrl(config.getBaseUrl()),
+            apiKey,
+            config.getModel(),
+            config.getTemperature(),
+            version
+        );
+      }
+
+      LlmGlobalSettingEntity setting = getGlobalSettingOrThrow();
+      String providerId = resolveAgentProviderId(setting);
+      LlmProviderEntity provider = getProviderEntityOrThrow(providerId);
+      if (!provider.isEnabled()) {
+        throw new BusinessException(
+            ErrorCode.PROVIDER_CONFIG_READ_FAILED,
+            "Agent 默认 Provider '" + providerId + "' 已禁用"
+        );
+      }
+      String apiKey = requireAgentApiKey(providerId, decryptApiKey(provider));
+      String version = providerId + ":" + Objects.toString(provider.getUpdatedAt(), "unversioned")
+          + ":" + Objects.toString(setting.getUpdatedAt(), "unversioned");
+      return new AgentModelRuntimeConfig(
+          providerId,
+          ApiPathResolver.resolveVersionedBaseUrl(provider.getBaseUrl()),
+          apiKey,
+          provider.getModel(),
+          provider.getTemperature(),
+          version
+      );
     } finally {
       rwLock.readLock().unlock();
     }
@@ -337,7 +399,9 @@ public class LlmProviderConfigService {
         return;
       }
       LlmGlobalSettingEntity setting = getGlobalSettingOrThrow();
-      if (id.equals(setting.getDefaultChatProviderId()) || id.equals(setting.getDefaultEmbeddingProviderId())) {
+      if (id.equals(setting.getDefaultChatProviderId())
+          || id.equals(setting.getDefaultEmbeddingProviderId())
+          || id.equals(resolveAgentProviderId(setting))) {
         throw new BusinessException(ErrorCode.PROVIDER_DEFAULT_CANNOT_DELETE,
             "默认 Provider '" + id + "' 不可删除，请先切换默认 Provider");
       }
@@ -398,6 +462,35 @@ public class LlmProviderConfigService {
       globalSettingRepository.save(setting);
       registry.reload();
       log.info("Updated default embedding provider: {}", providerId);
+    } finally {
+      rwLock.writeLock().unlock();
+    }
+  }
+
+  @Transactional
+  public void updateDefaultAgentProvider(DefaultProviderDTO request) {
+    rwLock.writeLock().lock();
+    try {
+      String providerId = trimOrNull(request.defaultAgentProvider());
+      if (providerId == null) {
+        throw new BusinessException(ErrorCode.BAD_REQUEST, "defaultAgentProvider 不能为空");
+      }
+      if (!isDatabaseBacked()) {
+        getLegacyProviderConfigOrThrow(providerId);
+        properties.setDefaultAgentProvider(providerId);
+        writeDefaultAgentProviderToYaml(providerId);
+        registry.reload();
+        return;
+      }
+      LlmProviderEntity provider = getProviderEntityOrThrow(providerId);
+      if (!provider.isEnabled()) {
+        throw new BusinessException(ErrorCode.BAD_REQUEST,
+            "Provider '" + providerId + "' 已禁用，不能设为 Agent 默认模型");
+      }
+      LlmGlobalSettingEntity setting = getGlobalSettingOrThrow();
+      setting.setDefaultAgentProviderId(providerId);
+      globalSettingRepository.save(setting);
+      log.info("Updated default Agent provider: {}", providerId);
     } finally {
       rwLock.writeLock().unlock();
     }
@@ -494,7 +587,7 @@ public class LlmProviderConfigService {
   }
 
   private void deleteProviderLegacy(String id) {
-    if (id.equals(properties.getDefaultProvider())) {
+    if (id.equals(properties.getDefaultProvider()) || id.equals(resolveLegacyAgentProviderId())) {
       throw new BusinessException(ErrorCode.PROVIDER_DEFAULT_CANNOT_DELETE,
           "默认 Provider '" + id + "' 不可删除，请先切换默认 Provider");
     }
@@ -515,6 +608,26 @@ public class LlmProviderConfigService {
     properties.setDefaultProvider(providerId);
     writeDefaultProviderToYaml(providerId);
     registry.reload();
+  }
+
+  private String resolveLegacyAgentProviderId() {
+    String configured = trimOrNull(properties.getDefaultAgentProvider());
+    return configured != null ? configured : properties.getDefaultProvider();
+  }
+
+  private String resolveAgentProviderId(LlmGlobalSettingEntity setting) {
+    String configured = trimOrNull(setting.getDefaultAgentProviderId());
+    return configured != null ? configured : setting.getDefaultChatProviderId();
+  }
+
+  private String requireAgentApiKey(String providerId, String apiKey) {
+    if (trimOrNull(apiKey) == null) {
+      throw new BusinessException(
+          ErrorCode.PROVIDER_CONFIG_READ_FAILED,
+          "Agent 默认 Provider '" + providerId + "' 未配置 API Key"
+      );
+    }
+    return apiKey;
   }
 
   private ProviderRuntimeConfig toRuntimeConfig(ProviderConfig config) {
@@ -781,6 +894,12 @@ public class LlmProviderConfigService {
     mutateYamlText(ErrorCode.PROVIDER_CONFIG_WRITE_FAILED, "写入默认 Provider 配置失败", editor -> {
       editor.setScalar(new String[]{"app", "ai", "default-provider"}, defaultProvider);
       editor.removeSection(new String[]{"app", "ai"}, "module-defaults");
+    });
+  }
+
+  private void writeDefaultAgentProviderToYaml(String defaultProvider) {
+    mutateYamlText(ErrorCode.PROVIDER_CONFIG_WRITE_FAILED, "写入 Agent 默认 Provider 配置失败", editor -> {
+      editor.setScalar(new String[]{"app", "ai", "default-agent-provider"}, defaultProvider);
     });
   }
 

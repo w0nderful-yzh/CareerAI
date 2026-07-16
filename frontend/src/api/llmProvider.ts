@@ -35,4 +35,7 @@ export const llmProviderApi = {
 
   updateDefaultEmbeddingProvider: (data: DefaultProvider) =>
     request.put<void>('/api/llm-provider/default-embedding-provider', data),
+
+  updateDefaultAgentProvider: (data: DefaultProvider) =>
+    request.put<void>('/api/llm-provider/default-agent-provider', data),
 };

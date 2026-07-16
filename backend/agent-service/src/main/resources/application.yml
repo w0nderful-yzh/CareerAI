@@ -1,0 +1,43 @@
+logging:
+  charset:
+    console: UTF-8
+    file: UTF-8
+
+server:
+  port: ${JAVA_AGENT_SERVICE_PORT:8082}
+
+spring:
+  config:
+    import:
+      - optional:file:.env[.properties]
+      - optional:file:../.env[.properties]
+      - optional:file:../../.env[.properties]
+  application:
+    name: agent-service
+  cloud:
+    compatibility-verifier:
+      enabled: false
+    nacos:
+      discovery:
+        enabled: ${NACOS_DISCOVERY_ENABLED:true}
+        register-enabled: ${NACOS_REGISTER_ENABLED:true}
+        server-addr: ${NACOS_SERVER_ADDR:localhost:8848}
+        namespace: ${NACOS_NAMESPACE:}
+        group: ${NACOS_GROUP:DEFAULT_GROUP}
+        username: ${NACOS_USERNAME:}
+        password: ${NACOS_PASSWORD:}
+  threads:
+    virtual:
+      enabled: true
+
+app:
+  agent:
+    core-service-url: ${AGENT_CORE_SERVICE_URL:http://localhost:8080}
+    internal:
+      service-token: ${AGENT_INTERNAL_SERVICE_TOKEN:}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
