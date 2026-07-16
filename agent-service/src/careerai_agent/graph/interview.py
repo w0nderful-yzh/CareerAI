@@ -1,5 +1,6 @@
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import TypedDict, cast
+from typing import Any, TypedDict, cast
 
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
@@ -166,6 +167,103 @@ class AdaptiveInterviewService:
         if result is None:
             raise RuntimeError("interview graph completed without a result")
         return result.model_copy(update={"intent": InterviewIntent.ANSWER.value})
+
+    async def stream_turn(
+        self,
+        session_id: str,
+        question_index: int,
+        answer: str,
+        intent: InterviewIntent,
+        authorization: str,
+    ) -> AsyncIterator[tuple[str, Any]]:
+        """按真实执行阶段输出 SSE 事件；讲解和提示额外输出模型文本增量。"""
+        resolved_intent = resolve_interview_intent(intent, answer)
+        if resolved_intent in {InterviewIntent.HINT, InterviewIntent.EXPLAIN}:
+            yield "progress", {"phase": "context", "label": "正在读取当前题目上下文"}
+            context = ToolCallContext(
+                authorization=authorization,
+                run_id=(
+                    f"interview:{session_id}:question:{question_index}:"
+                    f"{resolved_intent.value.lower()}"
+                ),
+                step_id="load_interview_context",
+            )
+            interview_context = await self._business_client.get_interview_turn_context(
+                session_id,
+                context,
+            )
+            if interview_context.current_question.question_index != question_index:
+                raise RuntimeError("只能对当前面试问题请求辅助")
+            yield "progress", {"phase": "assist", "label": "教练正在组织讲解"}
+            chunks: list[str] = []
+            async for chunk in self._decision_maker.assist_stream(
+                interview_context,
+                resolved_intent,
+            ):
+                chunks.append(chunk)
+                yield "assistant_delta", {"text": chunk}
+            message = "".join(chunks).strip()[:3000]
+            yield "result", InterviewTurnResult(
+                sessionId=session_id,
+                completed=False,
+                nextQuestion=interview_context.current_question,
+                decision=None,
+                answeredCount=interview_context.answered_count,
+                totalQuestions=interview_context.total_questions,
+                intent=resolved_intent.value,
+                assistantMessage=message,
+            )
+            return
+
+        if resolved_intent is not InterviewIntent.ANSWER:
+            yield "progress", {"phase": "control", "label": "正在执行面试控制指令"}
+            result = await self._apply_control(
+                session_id,
+                question_index,
+                resolved_intent,
+                authorization,
+            )
+            yield "result", result
+            return
+
+        run_id = f"interview:{session_id}:question:{question_index}"
+        yield "progress", {"phase": "context", "label": "正在读取简历、岗位与历史能力画像"}
+        tool_context = ToolCallContext(
+            authorization=authorization,
+            run_id=run_id,
+            step_id="load_interview_context",
+        )
+        interview_context = await self._business_client.get_interview_turn_context(
+            session_id,
+            tool_context,
+        )
+
+        yield "progress", {"phase": "decision", "label": "Agent 正在评价回答并决定追问方向"}
+        decision = await self._decision_maker.decide(interview_context, answer)
+
+        yield "progress", {"phase": "question", "label": "正在结合简历与 JD 生成下一题"}
+        apply_context = ToolCallContext(
+            authorization=authorization,
+            run_id=run_id,
+            step_id="apply_interview_decision",
+        )
+        result = await self._business_client.apply_interview_turn(
+            session_id,
+            question_index,
+            answer,
+            decision.action.value,
+            decision.rationale,
+            decision.answer_score,
+            decision.feedback,
+            decision.difficulty_adjustment.value,
+            decision.next_question_intent,
+            decision.evaluation,
+            decision.end_reason.value if decision.end_reason else None,
+            "ANSWER",
+            apply_context,
+            idempotency_key=f"{run_id}:question:{question_index}",
+        )
+        yield "result", result.model_copy(update={"intent": InterviewIntent.ANSWER.value})
 
     async def _assist(
         self,

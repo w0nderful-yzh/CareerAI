@@ -2,7 +2,7 @@ import {useMemo, useRef} from 'react';
 import {motion} from 'framer-motion';
 import {Virtuoso, type VirtuosoHandle} from 'react-virtuoso';
 import type {InterviewQuestion, InterviewSession} from '../types/interview';
-import {BookOpen, FastForward, Lightbulb, Send, SkipForward} from 'lucide-react';
+import {BookOpen, BrainCircuit, FastForward, Lightbulb, Send, SkipForward} from 'lucide-react';
 import InterviewMessageBubble from './InterviewMessageBubble';
 
 interface Message {
@@ -10,6 +10,8 @@ interface Message {
   content: string;
   category?: string;
   questionIndex?: number;
+  streamId?: string;
+  streaming?: boolean;
 }
 
 interface InterviewChatPanelProps {
@@ -26,6 +28,7 @@ interface InterviewChatPanelProps {
   awaitingContinue: boolean;
   onCompleteEarly: () => void;
   isSubmitting: boolean;
+  streamStatus: string;
   showCompleteConfirm: boolean;
   onShowCompleteConfirm: (show: boolean) => void;
 }
@@ -47,6 +50,7 @@ export default function InterviewChatPanel({
   awaitingContinue,
   // onCompleteEarly, // 暂时未使用
   isSubmitting,
+  streamStatus,
   // showCompleteConfirm, // 暂时未使用
   onShowCompleteConfirm
 }: InterviewChatPanelProps) {
@@ -101,10 +105,40 @@ export default function InterviewChatPanel({
                 role={msg.type === 'interviewer' ? 'interviewer' : 'user'}
                 text={msg.content}
                 category={msg.category}
+                streaming={msg.streaming}
               />
             </div>
           )}
         />
+
+        {isSubmitting && streamStatus && (
+          <motion.div
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mx-6 mb-4 flex items-center gap-3 rounded-xl border border-cyan-200/70 bg-cyan-50/80 px-4 py-3 text-sm text-cyan-900 dark:border-cyan-800/60 dark:bg-cyan-950/25 dark:text-cyan-100"
+          >
+            <span className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-cyan-500/10">
+              <BrainCircuit className="h-4 w-4 text-cyan-600 dark:text-cyan-300" />
+              <span className="absolute -right-0.5 -top-0.5 h-2 w-2 animate-ping rounded-full bg-cyan-400" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold">{streamStatus}</p>
+              <div className="mt-1 flex gap-1" aria-hidden="true">
+                {[0, 1, 2].map(index => (
+                  <motion.span
+                    key={index}
+                    className="h-1 w-5 rounded-full bg-cyan-400/70"
+                    animate={{ opacity: [0.25, 1, 0.25] }}
+                    transition={{ duration: 1.1, repeat: Infinity, delay: index * 0.16 }}
+                  />
+                ))}
+              </div>
+            </div>
+            <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-cyan-600/70 dark:text-cyan-300/70">
+              Live
+            </span>
+          </motion.div>
+        )}
 
         {/* 输入区域 */}
             <div className="border-t border-slate-200 dark:border-slate-600 p-4 bg-slate-50 dark:bg-slate-700/50">
@@ -152,7 +186,7 @@ export default function InterviewChatPanel({
                       animate={{ rotate: 360 }}
                       transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
                     />
-                    提交中
+                    思考中
                   </>
                 ) : (
                   <>

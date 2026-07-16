@@ -6,6 +6,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import InterviewChatPanel from '../components/InterviewChatPanel';
 import InterviewPageHeader from '../components/InterviewPageHeader';
 import type {
+  AdaptiveInterviewTurnResult,
   InterviewBlueprint,
   InterviewAgentDecision,
   InterviewQuestion,
@@ -16,13 +17,15 @@ import type {
 import type {Difficulty} from '../components/UnifiedInterviewModal';
 import type {CategoryDTO} from '../api/skill';
 import { CUSTOM_SKILL_ID } from '../hooks/useInterviewConfig';
-import { BrainCircuit, GitBranch, Gauge, Target } from 'lucide-react';
+import { AlertCircle, BrainCircuit, GitBranch, Gauge, Target } from 'lucide-react';
 
 interface Message {
   type: 'interviewer' | 'user';
   content: string;
   category?: string;
   questionIndex?: number;
+  streamId?: string;
+  streaming?: boolean;
 }
 
 interface InterviewProps {
@@ -58,6 +61,7 @@ export default function Interview({
   const [messages, setMessages] = useState<Message[]>([]);
   const [answer, setAnswer] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [streamStatus, setStreamStatus] = useState('');
   const [error, setError] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
@@ -177,6 +181,8 @@ export default function Interview({
     if (!session || !currentQuestion || (intent === 'AUTO' && !content.trim())) return;
 
     setIsSubmitting(true);
+    setStreamStatus('正在连接面试 Agent');
+    setError('');
 
     const controlLabels: Partial<Record<InterviewIntent, string>> = {
       HINT: '请给我一点提示',
@@ -193,12 +199,49 @@ export default function Interview({
     setMessages(prev => [...prev, userMessage]);
 
     try {
-      const response = await agentApi.submitInterviewTurn(
+      let turnResponse: AdaptiveInterviewTurnResult | undefined;
+      let streamError: Error | undefined;
+      let streamedAssistant = '';
+      const streamId = `assist-${session.sessionId}-${currentQuestion.questionIndex}-${Date.now()}`;
+      const assistanceCategory = intent === 'HINT' ? '教练提示' : '题目讲解';
+
+      await agentApi.submitInterviewTurnStream(
         session.sessionId,
         currentQuestion.questionIndex,
         content.trim(),
         intent,
+        {
+          onProgress: progress => setStreamStatus(progress.label),
+          onAssistantDelta: chunk => {
+            streamedAssistant += chunk;
+            setMessages(previous => {
+              const exists = previous.some(message => message.streamId === streamId);
+              if (!exists) {
+                return [...previous, {
+                  type: 'interviewer',
+                  content: streamedAssistant,
+                  category: assistanceCategory,
+                  questionIndex: currentQuestion.questionIndex,
+                  streamId,
+                  streaming: true,
+                }];
+              }
+              return previous.map(message => message.streamId === streamId
+                ? { ...message, content: streamedAssistant, streaming: true }
+                : message);
+            });
+          },
+          onResult: result => {
+            turnResponse = result;
+          },
+          onError: streamFailure => {
+            streamError = streamFailure;
+          },
+        },
       );
+      if (streamError) throw streamError;
+      if (!turnResponse) throw new Error('面试 Agent 未返回完整结果');
+      const response = turnResponse;
 
       const assistanceIntent = response.intent === 'HINT' || response.intent === 'EXPLAIN';
       if (!assistanceIntent || intent === 'AUTO') {
@@ -207,7 +250,15 @@ export default function Interview({
       setLastDecision(response.decision);
       setAwaitingContinue(response.intent === 'EXPLAIN');
 
-      if (response.assistantMessage) {
+      if (streamedAssistant) {
+        setMessages(previous => previous.map(message => message.streamId === streamId
+          ? {
+              ...message,
+              content: response.assistantMessage || streamedAssistant,
+              streaming: false,
+            }
+          : message));
+      } else if (response.assistantMessage) {
         setMessages(prev => [...prev, {
           type: 'interviewer',
           content: response.assistantMessage!,
@@ -259,9 +310,13 @@ export default function Interview({
         }
       }
     } catch (err) {
-      setError('面试操作失败，请重试');
+      setMessages(previous => previous.map(message => message.streaming
+        ? { ...message, streaming: false }
+        : message));
+      setError(err instanceof Error ? err.message : '面试操作失败，请重试');
       console.error(err);
     } finally {
+      setStreamStatus('');
       setIsSubmitting(false);
     }
   };
@@ -336,6 +391,12 @@ export default function Interview({
       >
         {session.blueprint && <InterviewBlueprintCard blueprint={session.blueprint} />}
         {lastDecision && <InterviewDecisionCard decision={lastDecision} />}
+        {error && (
+          <div className="mb-4 flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/25 dark:text-rose-300">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
         <InterviewChatPanel
           session={session}
           currentQuestion={currentQuestion}
@@ -350,6 +411,7 @@ export default function Interview({
           awaitingContinue={awaitingContinue}
           onCompleteEarly={handleCompleteEarly}
           isSubmitting={isSubmitting}
+          streamStatus={streamStatus}
           showCompleteConfirm={showCompleteConfirm}
           onShowCompleteConfirm={setShowCompleteConfirm}
         />

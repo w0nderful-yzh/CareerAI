@@ -1,3 +1,4 @@
+from collections.abc import AsyncIterator
 from typing import Any
 
 from fastapi.testclient import TestClient
@@ -183,6 +184,15 @@ class FakeInterviewDecisionMaker:
         assert context.current_question.question_index == 0
         assert intent in {InterviewIntent.HINT, InterviewIntent.EXPLAIN}
         return "先区分不存在数据与空值缓存，再考虑 TTL 和并发回源。"
+
+    async def assist_stream(
+        self,
+        context: InterviewTurnContext,
+        intent: InterviewIntent,
+    ) -> AsyncIterator[str]:
+        message = await self.assist(context, intent)
+        for chunk in (message[:12], message[12:]):
+            yield chunk
 
 
 class FakeBusinessToolClient:
@@ -687,6 +697,47 @@ def test_interview_hint_does_not_submit_or_score_answer() -> None:
     assert data["nextQuestion"]["questionIndex"] == 0
     assert "TTL" in data["assistantMessage"]
     assert business_client.idempotency_keys == []
+
+
+def test_interview_turn_stream_reports_real_stages_and_result() -> None:
+    business_client = FakeBusinessToolClient()
+    app = create_test_app(business_client)
+
+    with TestClient(app) as client:
+        app.state.careerai_client = FakeCareerAiClient()
+        response = client.post(
+            "/api/agent/interviews/session-1/turns/stream",
+            headers={"Authorization": "Bearer test-token"},
+            json={
+                "questionIndex": 0,
+                "answer": "使用缓存空值并设置较短 TTL",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert response.text.count("event: progress") == 3
+    assert '"phase":"decision"' in response.text
+    assert '"phase":"question"' in response.text
+    assert "event: result" in response.text
+    assert '"action":"FOLLOW_UP"' in response.text
+
+
+def test_interview_hint_streams_assistant_markdown_chunks() -> None:
+    app = create_test_app()
+
+    with TestClient(app) as client:
+        app.state.careerai_client = FakeCareerAiClient()
+        response = client.post(
+            "/api/agent/interviews/session-1/turns/stream",
+            headers={"Authorization": "Bearer test-token"},
+            json={"questionIndex": 0, "intent": "HINT"},
+        )
+
+    assert response.status_code == 200
+    assert response.text.count("event: assistant_delta") == 2
+    assert "event: result" in response.text
+    assert '"intent":"HINT"' in response.text
 
 
 def test_text_end_intent_is_not_treated_as_answer() -> None:

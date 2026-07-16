@@ -1,4 +1,5 @@
 import json
+from collections.abc import AsyncIterator
 from enum import StrEnum
 from typing import Protocol
 
@@ -90,6 +91,12 @@ class InterviewDecisionMaker(Protocol):
 
     async def assist(self, context: InterviewTurnContext, intent: InterviewIntent) -> str: ...
 
+    def assist_stream(
+        self,
+        context: InterviewTurnContext,
+        intent: InterviewIntent,
+    ) -> AsyncIterator[str]: ...
+
 
 def resolve_interview_intent(requested: InterviewIntent, text: str) -> InterviewIntent:
     """显式按钮优先；AUTO 仅识别简短控制语句，避免误判正常技术回答。"""
@@ -167,6 +174,17 @@ class LangChainInterviewDecisionMaker:
             raise InterviewDecisionError(f"面试决策生成失败：{exc}") from exc
 
     async def assist(self, context: InterviewTurnContext, intent: InterviewIntent) -> str:
+        chunks = [chunk async for chunk in self.assist_stream(context, intent)]
+        message = "".join(chunks).strip()
+        if not message:
+            raise InterviewDecisionError("model returned empty interview assistance")
+        return message[:3000]
+
+    async def assist_stream(
+        self,
+        context: InterviewTurnContext,
+        intent: InterviewIntent,
+    ) -> AsyncIterator[str]:
         if intent not in {InterviewIntent.HINT, InterviewIntent.EXPLAIN}:
             raise InterviewDecisionError("unsupported interview assistance intent")
         instruction = (
@@ -176,12 +194,14 @@ class LangChainInterviewDecisionMaker:
         )
         try:
             model = await self._model_factory.get_chat_model()
-            response = await model.ainvoke(
+            emitted = False
+            async for chunk in model.astream(
                 [
                     SystemMessage(
                         content=(
                             "你是技术面试陪练教练。必须围绕当前问题提供辅助，"
-                            "不能虚构候选人的简历或 JD 经历。" + instruction
+                            "不能虚构候选人的简历或 JD 经历。请使用简洁 Markdown 排版，"
+                            "标题从三级标题开始，列表之间保留换行。" + instruction
                         )
                     ),
                     HumanMessage(
@@ -192,10 +212,13 @@ class LangChainInterviewDecisionMaker:
                         )
                     ),
                 ]
-            )
-            if not isinstance(response.content, str) or not response.content.strip():
+            ):
+                text = chunk.content if isinstance(chunk.content, str) else ""
+                if text:
+                    emitted = True
+                    yield text
+            if not emitted:
                 raise InterviewDecisionError("model returned empty interview assistance")
-            return response.content.strip()[:3000]
         except ModelConfigError:
             raise
         except InterviewDecisionError:
