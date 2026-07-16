@@ -1,6 +1,6 @@
 import {Link, Outlet, useLocation, useNavigate} from 'react-router-dom';
 import {motion} from 'framer-motion';
-import {Bot, BriefcaseBusiness, Calendar, ChevronRight, Database, FileStack, LogOut, MessageSquare, Moon, Settings, Sparkles, Sun, Users,} from 'lucide-react';
+import {Bot, BriefcaseBusiness, ChevronRight, FileStack, LogOut, Moon, Settings, Sparkles, Sun, Users,} from 'lucide-react';
 import {useTheme} from '../hooks/useTheme';
 import {useState} from 'react';
 import UnifiedInterviewModal, {UnifiedInterviewConfig} from './UnifiedInterviewModal';
@@ -68,22 +68,13 @@ export default function Layout() {
   const navGroups: NavGroup[] = [
     {
       id: 'interview',
-      title: '面试准备',
+      title: '岗位准备与面试',
       items: [
-        { id: 'agent', path: '/agent', label: 'Agent 工作台', icon: Bot, description: '编排业务任务' },
+        { id: 'agent', path: '/agent', label: 'Agent 工作台', icon: Bot, description: '规划与业务编排' },
         { id: 'resumes', path: '/history', label: '简历管理', icon: FileStack, description: '管理简历，AI 分析' },
-        { id: 'jobs', path: '/jobs', label: '岗位中心', icon: BriefcaseBusiness, description: 'JD 解析，目标岗位' },
-        { id: 'interview-hub', path: '/interview-hub', label: '模拟面试', icon: Sparkles, description: '文字面试练习' },
-        { id: 'interviews', path: '/interviews', label: '面试记录', icon: Users, description: '查看面试历史' },
-        { id: 'interview-schedule', path: '/interview-schedule', label: '面试日程', icon: Calendar, description: '管理面试安排' },
-      ],
-    },
-    {
-      id: 'knowledge',
-      title: '知识库',
-      items: [
-        { id: 'kb-manage', path: '/knowledgebase', label: '知识库管理', icon: Database, description: '管理知识文档' },
-        { id: 'chat', path: '/knowledgebase/chat', label: '问答助手', icon: MessageSquare, description: '基于知识库问答' },
+        { id: 'jobs', path: '/jobs', label: '岗位中心', icon: BriefcaseBusiness, description: 'JD 解析与匹配' },
+        { id: 'interview-hub', path: '/interview-hub', label: '模拟面试', icon: Sparkles, description: '岗位定向练习' },
+        { id: 'interviews', path: '/interviews', label: '面试记录', icon: Users, description: '训练历史与评分' },
       ],
     },
     {
@@ -108,9 +99,6 @@ export default function Layout() {
       return currentPath === '/interview-hub'
         || currentPath === '/interview'
         || currentPath.startsWith('/interview/');
-    }
-    if (path === '/knowledgebase') {
-      return currentPath === '/knowledgebase' || currentPath === '/knowledgebase/upload';
     }
     return currentPath.startsWith(path);
   };
