@@ -2,7 +2,7 @@ import {useMemo, useRef} from 'react';
 import {motion} from 'framer-motion';
 import {Virtuoso, type VirtuosoHandle} from 'react-virtuoso';
 import type {InterviewQuestion, InterviewSession} from '../types/interview';
-import {Send} from 'lucide-react';
+import {BookOpen, FastForward, Lightbulb, Send, SkipForward} from 'lucide-react';
 import InterviewMessageBubble from './InterviewMessageBubble';
 
 interface Message {
@@ -19,6 +19,11 @@ interface InterviewChatPanelProps {
   answer: string;
   onAnswerChange: (answer: string) => void;
   onSubmit: () => void;
+  onHint: () => void;
+  onExplain: () => void;
+  onSkip: () => void;
+  onContinue: () => void;
+  awaitingContinue: boolean;
   onCompleteEarly: () => void;
   isSubmitting: boolean;
   showCompleteConfirm: boolean;
@@ -35,6 +40,11 @@ export default function InterviewChatPanel({
   answer,
   onAnswerChange,
   onSubmit,
+  onHint,
+  onExplain,
+  onSkip,
+  onContinue,
+  awaitingContinue,
   // onCompleteEarly, // 暂时未使用
   isSubmitting,
   // showCompleteConfirm, // 暂时未使用
@@ -98,6 +108,25 @@ export default function InterviewChatPanel({
 
         {/* 输入区域 */}
             <div className="border-t border-slate-200 dark:border-slate-600 p-4 bg-slate-50 dark:bg-slate-700/50">
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <span className="mr-1 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">
+              Coach controls
+            </span>
+            <ControlButton icon={<Lightbulb className="h-3.5 w-3.5" />} label="给点提示" onClick={onHint} disabled={isSubmitting} />
+            <ControlButton icon={<BookOpen className="h-3.5 w-3.5" />} label="讲解本题" onClick={onExplain} disabled={isSubmitting} />
+            <ControlButton icon={<SkipForward className="h-3.5 w-3.5" />} label="跳过" onClick={onSkip} disabled={isSubmitting} />
+            {awaitingContinue && (
+              <button
+                type="button"
+                onClick={onContinue}
+                disabled={isSubmitting}
+                className="ml-auto inline-flex items-center gap-1.5 rounded-lg bg-cyan-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm transition hover:bg-cyan-500 disabled:opacity-50"
+              >
+                <FastForward className="h-3.5 w-3.5" />
+                继续下一题
+              </button>
+            )}
+          </div>
           <div className="flex gap-3">
             <textarea
               value={answer}
@@ -146,5 +175,29 @@ export default function InterviewChatPanel({
         </div>
       </div>
     </div>
+  );
+}
+
+function ControlButton({
+  icon,
+  label,
+  onClick,
+  disabled,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+  disabled: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-cyan-300 hover:text-cyan-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:border-cyan-700 dark:hover:text-cyan-300"
+    >
+      {icon}
+      {label}
+    </button>
   );
 }

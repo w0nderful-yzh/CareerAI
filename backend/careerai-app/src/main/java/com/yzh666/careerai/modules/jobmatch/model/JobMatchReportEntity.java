@@ -67,6 +67,10 @@ public class JobMatchReportEntity {
     @Column(columnDefinition = "TEXT")
     private String actionItemsJson;
 
+    /** 结构化保存 JD 要求、简历证据和覆盖判断，避免只留下不可追溯的总结。 */
+    @Column(columnDefinition = "TEXT")
+    private String evidenceMappingsJson;
+
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

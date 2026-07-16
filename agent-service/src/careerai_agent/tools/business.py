@@ -5,11 +5,22 @@ from pydantic import BaseModel
 
 from careerai_agent.tools.client import BusinessToolClient, ToolCallContext
 from careerai_agent.tools.models import (
+    ApplyInterviewTurnInput,
     CreateImprovementPlanInput,
+    CreateInterviewSessionInput,
     EmptyInput,
+    InterviewBlueprint,
+    InterviewCategory,
+    InterviewPlanningContext,
+    InterviewSession,
+    InterviewSessionInput,
+    InterviewTurnContext,
+    InterviewTurnEvaluation,
+    InterviewTurnResult,
     JobMatchReport,
     JobMatchTask,
     JobSnapshot,
+    NextQuestionIntent,
     ResourceIdInput,
     ResumeDetail,
     ResumeImprovementPlan,
@@ -28,6 +39,10 @@ class BusinessTools:
     get_match_report: BaseTool
     create_improvement_plan: BaseTool
     get_improvement_plan: BaseTool
+    create_interview_session: BaseTool
+    get_interview_turn_context: BaseTool
+    get_interview_planning_context: BaseTool
+    apply_interview_turn: BaseTool
 
 
 def build_business_tools(
@@ -57,15 +72,96 @@ def build_business_tools(
     async def get_match_report(resource_id: int) -> JobMatchReport:
         return await client.get_match_report(resource_id, context)
 
-    async def create_improvement_plan(match_report_id: int) -> ResumeImprovementPlan:
+    async def create_improvement_plan(
+        match_report_id: int,
+        strategy: str,
+        rationale: str,
+        prioritized_gaps: list[str],
+        supporting_evidence: list[str],
+        interview_focus: list[str],
+    ) -> ResumeImprovementPlan:
         return await client.create_improvement_plan(
             match_report_id,
+            strategy,
+            rationale,
+            prioritized_gaps,
+            supporting_evidence,
+            interview_focus,
             context,
             idempotency_key=f"{context.run_id}:create_improvement_plan",
         )
 
     async def get_improvement_plan(resource_id: int) -> ResumeImprovementPlan:
         return await client.get_improvement_plan(resource_id, context)
+
+    async def get_interview_turn_context(session_id: str) -> InterviewTurnContext:
+        return await client.get_interview_turn_context(session_id, context)
+
+    async def get_interview_planning_context() -> InterviewPlanningContext:
+        return await client.get_interview_planning_context(context)
+
+    async def create_interview_session(
+        resume_text: str | None,
+        question_count: int,
+        resume_id: int | None,
+        force_create: bool,
+        llm_provider: str | None,
+        skill_id: str,
+        difficulty: str,
+        custom_categories: list[InterviewCategory],
+        jd_text: str | None,
+        job_id: int | None,
+        match_report_id: int | None,
+        blueprint: InterviewBlueprint,
+    ) -> InterviewSession:
+        return await client.create_interview_session(
+            resume_text=resume_text,
+            question_count=question_count,
+            resume_id=resume_id,
+            force_create=force_create,
+            llm_provider=llm_provider,
+            skill_id=skill_id,
+            difficulty=difficulty,
+            custom_categories=custom_categories,
+            jd_text=jd_text,
+            job_id=job_id,
+            match_report_id=match_report_id,
+            blueprint=blueprint,
+            context=context,
+            idempotency_key=f"{context.run_id}:create_interview_session",
+        )
+
+    async def apply_interview_turn(
+        session_id: str,
+        question_index: int,
+        answer: str,
+        action: str,
+        rationale: str,
+        answer_score: int,
+        feedback: str,
+        difficulty_adjustment: str,
+        next_question_intent: NextQuestionIntent | None = None,
+        evaluation: InterviewTurnEvaluation | None = None,
+        end_reason: str | None = None,
+    ) -> InterviewTurnResult:
+        if evaluation is None:
+            raise ValueError("evaluation is required")
+        return await client.apply_interview_turn(
+            session_id,
+            question_index,
+            answer,
+            action,
+            rationale,
+            answer_score,
+            feedback,
+            difficulty_adjustment,
+            next_question_intent,
+            evaluation,
+            end_reason,
+            "ANSWER",
+            context,
+            idempotency_key=f"{context.run_id}:question:{question_index}",
+        )
 
     # StructuredTool 保留清晰 JSON Schema，后续可直接交给模型选择。
     return BusinessTools(
@@ -108,7 +204,7 @@ def build_business_tools(
         create_improvement_plan=StructuredTool.from_function(
             coroutine=create_improvement_plan,
             name="create_resume_improvement_plan",
-            description="根据匹配报告幂等创建简历改进计划。",
+            description="根据匹配报告和 Agent 选定的准备策略，幂等创建简历改进计划。",
             args_schema=CreateImprovementPlanInput,
         ),
         get_improvement_plan=StructuredTool.from_function(
@@ -116,6 +212,30 @@ def build_business_tools(
             name="get_resume_improvement_plan",
             description="读取已创建的简历改进计划。",
             args_schema=ResourceIdInput,
+        ),
+        create_interview_session=StructuredTool.from_function(
+            coroutine=create_interview_session,
+            name="create_interview_session",
+            description="执行结构化面试蓝图，幂等创建会话并生成首题。",
+            args_schema=CreateInterviewSessionInput,
+        ),
+        get_interview_turn_context=StructuredTool.from_function(
+            coroutine=get_interview_turn_context,
+            name="get_interview_turn_context",
+            description="读取当前面试题、历史问答、出题蓝图和 JD 证据矩阵。",
+            args_schema=InterviewSessionInput,
+        ),
+        get_interview_planning_context=StructuredTool.from_function(
+            coroutine=get_interview_planning_context,
+            name="get_interview_planning_context",
+            description="读取当前用户跨场次能力画像、未完成面试任务和最近待验证目标。",
+            args_schema=EmptyInput,
+        ),
+        apply_interview_turn=StructuredTool.from_function(
+            coroutine=apply_interview_turn,
+            name="apply_interview_turn",
+            description="提交回答和下一题意图，由 Java 校验、生成并持久化最终问题。",
+            args_schema=ApplyInterviewTurnInput,
         ),
     )
 

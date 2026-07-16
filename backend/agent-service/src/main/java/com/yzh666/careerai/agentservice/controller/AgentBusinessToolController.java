@@ -3,7 +3,13 @@ package com.yzh666.careerai.agentservice.controller;
 import com.yzh666.careerai.agentservice.service.AgentBusinessToolBridgeService;
 import com.yzh666.careerai.agentservice.service.AgentToolCallContext;
 import com.yzh666.careerai.common.agent.AgentInternalAccessService;
+import com.yzh666.careerai.common.agent.tool.AgentCreateInterviewSessionCommand;
+import com.yzh666.careerai.common.agent.tool.AgentInterviewSession;
 import com.yzh666.careerai.common.agent.tool.AgentJobMatchCommand;
+import com.yzh666.careerai.common.agent.tool.AgentInterviewTurnCommand;
+import com.yzh666.careerai.common.agent.tool.AgentInterviewTurnContext;
+import com.yzh666.careerai.common.agent.tool.AgentInterviewPlanningContext;
+import com.yzh666.careerai.common.agent.tool.AgentInterviewTurnResult;
 import com.yzh666.careerai.common.agent.tool.AgentJobMatchReport;
 import com.yzh666.careerai.common.agent.tool.AgentJobMatchTask;
 import com.yzh666.careerai.common.agent.tool.AgentJobSnapshot;
@@ -123,6 +129,15 @@ public class AgentBusinessToolController {
     if (command == null || command.matchReportId() == null || command.matchReportId() <= 0) {
       throw new BusinessException(ErrorCode.BAD_REQUEST, "matchReportId 必须为正整数");
     }
+    if (command.strategy() == null || command.strategy().isBlank()) {
+      throw new BusinessException(ErrorCode.BAD_REQUEST, "strategy 不能为空");
+    }
+    if (command.rationale() == null || command.rationale().isBlank()) {
+      throw new BusinessException(ErrorCode.BAD_REQUEST, "rationale 不能为空");
+    }
+    if (command.prioritizedGaps() == null || command.prioritizedGaps().isEmpty()) {
+      throw new BusinessException(ErrorCode.BAD_REQUEST, "prioritizedGaps 不能为空");
+    }
     return Result.success(bridgeService.createImprovementPlan(
         command,
         context,
@@ -140,6 +155,68 @@ public class AgentBusinessToolController {
   ) {
     AgentToolCallContext context = verifyContext(serviceToken, authorization, runId, stepId);
     return Result.success(bridgeService.getImprovementPlan(requireId(planId, "planId"), context));
+  }
+
+  @GetMapping("/interview-sessions/{sessionId}/turn-context")
+  public Result<AgentInterviewTurnContext> getInterviewTurnContext(
+      @PathVariable String sessionId,
+      @RequestHeader(value = AgentInternalAccessService.TOKEN_HEADER, required = false) String serviceToken,
+      @RequestHeader(value = AgentInternalAccessService.AUTHORIZATION_HEADER, required = false) String authorization,
+      @RequestHeader(value = AgentInternalAccessService.RUN_ID_HEADER, required = false) String runId,
+      @RequestHeader(value = AgentInternalAccessService.STEP_ID_HEADER, required = false) String stepId
+  ) {
+    AgentToolCallContext context = verifyContext(serviceToken, authorization, runId, stepId);
+    return Result.success(bridgeService.getInterviewTurnContext(requireSessionId(sessionId), context));
+  }
+
+  @GetMapping("/interview-planning-context")
+  public Result<AgentInterviewPlanningContext> getInterviewPlanningContext(
+      @RequestHeader(value = AgentInternalAccessService.TOKEN_HEADER, required = false) String serviceToken,
+      @RequestHeader(value = AgentInternalAccessService.AUTHORIZATION_HEADER, required = false) String authorization,
+      @RequestHeader(value = AgentInternalAccessService.RUN_ID_HEADER, required = false) String runId,
+      @RequestHeader(value = AgentInternalAccessService.STEP_ID_HEADER, required = false) String stepId
+  ) {
+    AgentToolCallContext context = verifyContext(serviceToken, authorization, runId, stepId);
+    return Result.success(bridgeService.getInterviewPlanningContext(context));
+  }
+
+  @PostMapping("/interview-sessions")
+  public Result<AgentInterviewSession> createInterviewSession(
+      @RequestBody AgentCreateInterviewSessionCommand command,
+      @RequestHeader(value = AgentInternalAccessService.TOKEN_HEADER, required = false) String serviceToken,
+      @RequestHeader(value = AgentInternalAccessService.AUTHORIZATION_HEADER, required = false) String authorization,
+      @RequestHeader(value = AgentInternalAccessService.RUN_ID_HEADER, required = false) String runId,
+      @RequestHeader(value = AgentInternalAccessService.STEP_ID_HEADER, required = false) String stepId,
+      @RequestHeader(value = AgentInternalAccessService.IDEMPOTENCY_KEY_HEADER, required = false) String idempotencyKey
+  ) {
+    AgentToolCallContext context = verifyContext(serviceToken, authorization, runId, stepId);
+    if (command == null || command.blueprint() == null) {
+      throw new BusinessException(ErrorCode.BAD_REQUEST, "Agent 面试参数和蓝图不能为空");
+    }
+    return Result.success(bridgeService.createInterviewSession(
+        command,
+        context,
+        internalAccessService.requireIdempotencyKey(idempotencyKey)
+    ));
+  }
+
+  @PostMapping("/interview-sessions/{sessionId}/turns")
+  public Result<AgentInterviewTurnResult> applyInterviewTurn(
+      @PathVariable String sessionId,
+      @RequestBody AgentInterviewTurnCommand command,
+      @RequestHeader(value = AgentInternalAccessService.TOKEN_HEADER, required = false) String serviceToken,
+      @RequestHeader(value = AgentInternalAccessService.AUTHORIZATION_HEADER, required = false) String authorization,
+      @RequestHeader(value = AgentInternalAccessService.RUN_ID_HEADER, required = false) String runId,
+      @RequestHeader(value = AgentInternalAccessService.STEP_ID_HEADER, required = false) String stepId,
+      @RequestHeader(value = AgentInternalAccessService.IDEMPOTENCY_KEY_HEADER, required = false) String idempotencyKey
+  ) {
+    AgentToolCallContext context = verifyContext(serviceToken, authorization, runId, stepId);
+    return Result.success(bridgeService.applyInterviewTurn(
+        requireSessionId(sessionId),
+        command,
+        context,
+        internalAccessService.requireIdempotencyKey(idempotencyKey)
+    ));
   }
 
   private AgentToolCallContext verifyContext(
@@ -165,5 +242,12 @@ public class AgentBusinessToolController {
       throw new BusinessException(ErrorCode.BAD_REQUEST, fieldName + " 必须为正整数");
     }
     return id;
+  }
+
+  private String requireSessionId(String sessionId) {
+    if (sessionId == null || sessionId.isBlank() || sessionId.length() > 36) {
+      throw new BusinessException(ErrorCode.BAD_REQUEST, "sessionId 无效");
+    }
+    return sessionId.trim();
   }
 }

@@ -12,6 +12,7 @@ import com.yzh666.careerai.modules.interview.model.InterviewSessionEntity;
 import com.yzh666.careerai.modules.interview.repository.InterviewSessionRepository;
 import com.yzh666.careerai.modules.interview.service.AnswerEvaluationService;
 import com.yzh666.careerai.modules.interview.service.InterviewPersistenceService;
+import com.yzh666.careerai.modules.interview.service.InterviewClosureService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.redisson.api.stream.StreamMessageId;
@@ -38,6 +39,7 @@ public class EvaluateStreamConsumer extends AbstractStreamConsumer<EvaluateStrea
     private final InterviewPersistenceService persistenceService;
     private final ObjectMapper objectMapper;
     private final LlmProviderRegistry llmProviderRegistry;
+    private final InterviewClosureService interviewClosureService;
 
     public EvaluateStreamConsumer(
         RedisService redisService,
@@ -45,7 +47,8 @@ public class EvaluateStreamConsumer extends AbstractStreamConsumer<EvaluateStrea
         AnswerEvaluationService evaluationService,
         InterviewPersistenceService persistenceService,
         ObjectMapper objectMapper,
-        LlmProviderRegistry llmProviderRegistry
+        LlmProviderRegistry llmProviderRegistry,
+        InterviewClosureService interviewClosureService
     ) {
         super(redisService);
         this.sessionRepository = sessionRepository;
@@ -53,6 +56,7 @@ public class EvaluateStreamConsumer extends AbstractStreamConsumer<EvaluateStrea
         this.persistenceService = persistenceService;
         this.objectMapper = objectMapper;
         this.llmProviderRegistry = llmProviderRegistry;
+        this.interviewClosureService = interviewClosureService;
     }
 
     record EvaluatePayload(String sessionId) {}
@@ -132,6 +136,10 @@ public class EvaluateStreamConsumer extends AbstractStreamConsumer<EvaluateStrea
                 questions.set(index, question.withAnswer(answer.getUserAnswer()));
             }
         }
+        // 自适应流程可能跳过当前题，未回答问题不参与评分。
+        questions = questions.stream()
+            .filter(question -> question.userAnswer() != null && !question.userAnswer().isBlank())
+            .toList();
 
         // 获取 LLM 客户端
         String provider = session.getLlmProvider();
@@ -140,6 +148,7 @@ public class EvaluateStreamConsumer extends AbstractStreamConsumer<EvaluateStrea
         String resumeText = session.getResume() != null ? session.getResume().getResumeText() : "";
         InterviewReportDTO report = evaluationService.evaluateInterview(chatClient, sessionId, resumeText, questions);
         persistenceService.saveReport(sessionId, report);
+        interviewClosureService.finalizeSession(sessionId, report);
     }
 
     @Override

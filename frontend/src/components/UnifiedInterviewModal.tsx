@@ -2,9 +2,9 @@ import { useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   X, Sparkles,
-  FileStack, ChevronDown, ChevronUp, Loader2
+  FileStack, ChevronDown, ChevronUp, Loader2, Crosshair
 } from 'lucide-react';
-import { useInterviewConfig, CUSTOM_SKILL_ID, DIFFICULTY_OPTIONS, type InterviewMode, type Difficulty } from '../hooks/useInterviewConfig';
+import { useInterviewConfig, CUSTOM_SKILL_ID, DIFFICULTY_OPTIONS, type InterviewMode, type Difficulty, type TrainingMode } from '../hooks/useInterviewConfig';
 import { getSkillIcon } from '../utils/skillIcons';
 
 // Re-export for backward compatibility
@@ -25,6 +25,8 @@ export interface UnifiedInterviewConfig {
   hrEnabled: boolean;
   customJdText?: string;
   customCategories?: import('../api/skill').CategoryDTO[];
+  trainingMode: TrainingMode;
+  userFocus?: string;
 }
 
 interface UnifiedInterviewModalProps {
@@ -85,6 +87,8 @@ export default function UnifiedInterviewModal({
       hrEnabled: true,
       customJdText: config.isCustomSkill ? config.parsedCustomJdText : undefined,
       customCategories: config.isCustomSkill ? config.customCategories : undefined,
+      trainingMode: config.trainingMode,
+      userFocus: config.userFocus.trim() || undefined,
     });
   };
 
@@ -144,6 +148,45 @@ export default function UnifiedInterviewModal({
                     </p>
                   </div>
                 )}
+
+                {/* Agent 训练策略：用户描述目标，具体题型组合由蓝图规划器决定。 */}
+                <div>
+                  <label className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                    <Crosshair className="h-4 w-4 text-cyan-500" />
+                    Agent 训练策略
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {([
+                      ['GENERAL', '综合摸底', '均衡判断当前水平'],
+                      ['RESUME_DEFENSE', '简历深挖', '验证项目真实性与取舍'],
+                      ['FOCUS_DRILL', '专项强化', '围绕主动要求集中训练'],
+                    ] as const).map(([value, label, desc]) => {
+                      const selected = config.trainingMode === value;
+                      return (
+                        <button
+                          key={value}
+                          onClick={() => config.setTrainingMode(value)}
+                          className={`rounded-xl border-2 px-3 py-3 text-left transition-all ${selected
+                            ? 'border-cyan-500 bg-cyan-50 dark:bg-cyan-950/30'
+                            : 'border-slate-200 bg-white hover:border-slate-300 dark:border-slate-700 dark:bg-slate-800'
+                          }`}
+                        >
+                          <p className={`text-xs font-semibold ${selected ? 'text-cyan-800 dark:text-cyan-200' : 'text-slate-700 dark:text-slate-200'}`}>
+                            {label}
+                          </p>
+                          <p className="mt-1 text-[10px] leading-4 text-slate-400">{desc}</p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <textarea
+                    value={config.userFocus}
+                    onChange={event => config.setUserFocus(event.target.value)}
+                    placeholder="可选：例如重点考察 Redis 一致性、线上故障定位，并结合我的 CareerAI 项目追问"
+                    rows={3}
+                    className="mt-3 w-full resize-none rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                  />
+                </div>
 
                 {/* 面试方向 */}
                 <div>

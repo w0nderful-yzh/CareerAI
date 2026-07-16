@@ -1,5 +1,6 @@
 package com.yzh666.careerai.modules.resumeplan.service;
 
+import com.yzh666.careerai.common.agent.tool.AgentResumeImprovementPlanCommand;
 import com.yzh666.careerai.common.ai.LlmProviderRegistry;
 import com.yzh666.careerai.common.ai.StructuredOutputInvoker;
 import com.yzh666.careerai.common.exception.BusinessException;
@@ -8,20 +9,26 @@ import com.yzh666.careerai.modules.interview.model.InterviewSessionEntity;
 import com.yzh666.careerai.modules.interview.repository.InterviewSessionRepository;
 import com.yzh666.careerai.modules.job.model.JobEntity;
 import com.yzh666.careerai.modules.job.repository.JobRepository;
+import com.yzh666.careerai.modules.jobmatch.dto.JdRequirementDTO;
+import com.yzh666.careerai.modules.jobmatch.dto.RequirementEvidenceDTO;
+import com.yzh666.careerai.modules.jobmatch.dto.ResumeEvidenceDTO;
 import com.yzh666.careerai.modules.jobmatch.model.JobMatchReportEntity;
 import com.yzh666.careerai.modules.jobmatch.repository.JobMatchReportRepository;
 import com.yzh666.careerai.modules.resume.model.ResumeEntity;
 import com.yzh666.careerai.modules.resume.repository.ResumeRepository;
 import com.yzh666.careerai.modules.resumeplan.dto.CreateResumeImprovementPlanRequest;
+import com.yzh666.careerai.modules.resumeplan.dto.PreparationTaskDTO;
 import com.yzh666.careerai.modules.resumeplan.dto.ResumeImprovementPlanDTO;
 import com.yzh666.careerai.modules.resumeplan.model.ResumeImprovementPlanEntity;
 import com.yzh666.careerai.modules.resumeplan.repository.ResumeImprovementPlanRepository;
 import com.yzh666.careerai.modules.user.service.CurrentUserService;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.prompt.PromptTemplate;
@@ -40,6 +47,13 @@ public class ResumeImprovementPlanService {
     private static final int MAX_RESUME_TEXT_LENGTH = 14_000;
     private static final int MAX_JD_TEXT_LENGTH = 10_000;
     private static final int MAX_INTERVIEW_REVIEW_LENGTH = 8_000;
+    private static final Set<String> TASK_CATEGORIES = Set.of(
+        "RESUME",
+        "PROJECT",
+        "LEARNING",
+        "INTERVIEW"
+    );
+    private static final Set<String> TASK_PRIORITIES = Set.of("P0", "P1", "P2");
 
     private final ResumeImprovementPlanRepository planRepository;
     private final JobMatchReportRepository matchReportRepository;
@@ -61,7 +75,8 @@ public class ResumeImprovementPlanService {
         List<String> resumeRewriteBullets,
         List<String> projectUpgradeTasks,
         List<String> interviewPracticeTasks,
-        List<String> learningTasks
+        List<String> learningTasks,
+        List<PreparationTaskDTO> preparationTasks
     ) {
     }
 
@@ -114,25 +129,26 @@ public class ResumeImprovementPlanService {
 
     public ResumeImprovementPlanDTO createPlan(CreateResumeImprovementPlanRequest request) {
         Long userId = currentUserService.currentUserId();
-        return createPlan(request, userId, null);
+        return createPlan(request.matchReportId(), userId, null, null);
     }
 
     public ResumeImprovementPlanDTO createPlanIdempotently(
-        CreateResumeImprovementPlanRequest request,
+        AgentResumeImprovementPlanCommand command,
         String idempotencyKey
     ) {
         Long userId = currentUserService.currentUserId();
         return planRepository.findByUserIdAndAgentIdempotencyKey(userId, idempotencyKey)
             .map(this::toDTO)
-            .orElseGet(() -> createPlan(request, userId, idempotencyKey));
+            .orElseGet(() -> createPlan(command.matchReportId(), userId, idempotencyKey, command));
     }
 
     private ResumeImprovementPlanDTO createPlan(
-        CreateResumeImprovementPlanRequest request,
+        Long matchReportId,
         Long userId,
-        String idempotencyKey
+        String idempotencyKey,
+        AgentResumeImprovementPlanCommand agentDecision
     ) {
-        JobMatchReportEntity report = matchReportRepository.findByIdAndUserId(request.matchReportId(), userId)
+        JobMatchReportEntity report = matchReportRepository.findByIdAndUserId(matchReportId, userId)
             .orElseThrow(() -> new BusinessException(ErrorCode.JOB_MATCH_NOT_FOUND));
         ResumeEntity resume = resumeRepository.findByIdAndUserId(report.getResumeId(), userId)
             .orElseThrow(() -> new BusinessException(ErrorCode.RESUME_NOT_FOUND));
@@ -143,7 +159,13 @@ public class ResumeImprovementPlanService {
             throw new BusinessException(ErrorCode.RESUME_PARSE_FAILED, "简历文本为空，请重新上传或解析简历");
         }
 
-        PlanAnalysisDTO analysis = generatePlan(resume, job, report, findLatestJobEvaluation(userId, report));
+        PlanAnalysisDTO analysis = generatePlan(
+            resume,
+            job,
+            report,
+            findLatestJobEvaluation(userId, report),
+            agentDecision
+        );
         ResumeImprovementPlanEntity entity = new ResumeImprovementPlanEntity();
         entity.setUserId(userId);
         entity.setMatchReportId(report.getId());
@@ -158,6 +180,7 @@ public class ResumeImprovementPlanService {
         entity.setProjectUpgradeTasksJson(writeList(analysis.projectUpgradeTasks()));
         entity.setInterviewPracticeTasksJson(writeList(analysis.interviewPracticeTasks()));
         entity.setLearningTasksJson(writeList(analysis.learningTasks()));
+        entity.setPreparationTasksJson(writePreparationTasks(analysis.preparationTasks()));
         entity.setAgentIdempotencyKey(idempotencyKey);
 
         ResumeImprovementPlanEntity saved;
@@ -187,7 +210,8 @@ public class ResumeImprovementPlanService {
         ResumeEntity resume,
         JobEntity job,
         JobMatchReportEntity report,
-        String latestInterviewReview
+        String latestInterviewReview,
+        AgentResumeImprovementPlanCommand agentDecision
     ) {
         try {
             Map<String, Object> variables = new HashMap<>();
@@ -198,6 +222,7 @@ public class ResumeImprovementPlanService {
             variables.put("location", defaultText(job.getLocation(), "未填写"));
             variables.put("jdText", truncate(job.getJdText(), MAX_JD_TEXT_LENGTH));
             variables.put("matchReport", buildMatchReportContext(report));
+            variables.put("agentDecision", buildAgentDecisionContext(agentDecision));
             variables.put(
                 "latestInterviewReview",
                 latestInterviewReview.isBlank() ? "暂无岗位模拟面试复盘。" : latestInterviewReview
@@ -256,7 +281,35 @@ public class ResumeImprovementPlanService {
         appendList(sb, "匹配亮点", readList(report.getMatchedHighlightsJson()));
         appendList(sb, "主要差距", readList(report.getGapsJson()));
         appendList(sb, "行动项", readList(report.getActionItemsJson()));
+        appendEvidenceMatrix(sb, readEvidenceMappings(report.getEvidenceMappingsJson()));
         return sb.toString();
+    }
+
+    private String buildAgentDecisionContext(AgentResumeImprovementPlanCommand decision) {
+        if (decision == null) {
+            return "## Agent 准备策略\n本次计划由用户直接创建，无额外 Agent 决策约束。";
+        }
+        StringBuilder sb = new StringBuilder("## Agent 准备策略\n");
+        sb.append("- 策略：").append(defaultText(decision.strategy(), "BALANCED")).append('\n');
+        sb.append("- 决策理由：")
+            .append(truncate(defaultText(decision.rationale(), "综合补强"), 500))
+            .append("\n\n");
+        appendList(sb, "优先缺口", safeDecisionItems(decision.prioritizedGaps()));
+        appendList(sb, "支撑证据", safeDecisionItems(decision.supportingEvidence()));
+        appendList(sb, "面试训练重点", safeDecisionItems(decision.interviewFocus()));
+        return sb.toString();
+    }
+
+    private List<String> safeDecisionItems(List<String> items) {
+        if (items == null) {
+            return List.of();
+        }
+        return items.stream()
+            .filter(item -> item != null && !item.isBlank())
+            .map(String::trim)
+            .map(item -> truncate(item, 300))
+            .limit(5)
+            .toList();
     }
 
     private ResumeImprovementPlanDTO toDTO(ResumeImprovementPlanEntity entity) {
@@ -274,8 +327,82 @@ public class ResumeImprovementPlanService {
             readList(entity.getProjectUpgradeTasksJson()),
             readList(entity.getInterviewPracticeTasksJson()),
             readList(entity.getLearningTasksJson()),
+            readPreparationTasks(entity.getPreparationTasksJson()),
             entity.getCreatedAt()
         );
+    }
+
+    private String writePreparationTasks(List<PreparationTaskDTO> tasks) {
+        try {
+            return objectMapper.writeValueAsString(normalizePreparationTasks(tasks));
+        } catch (JacksonException e) {
+            throw new BusinessException(ErrorCode.RESUME_PLAN_FAILED, "保存结构化准备任务失败");
+        }
+    }
+
+    private List<PreparationTaskDTO> normalizePreparationTasks(List<PreparationTaskDTO> tasks) {
+        if (tasks == null || tasks.isEmpty()) {
+            return List.of();
+        }
+        List<PreparationTaskDTO> normalized = new ArrayList<>();
+        for (PreparationTaskDTO task : tasks) {
+            if (task == null || task.title() == null || task.title().isBlank()) {
+                continue;
+            }
+            normalized.add(new PreparationTaskDTO(
+                truncate(defaultText(task.id(), "TASK-" + (normalized.size() + 1)), 40),
+                normalizeValue(task.category(), TASK_CATEGORIES, "LEARNING"),
+                truncate(task.title().trim(), 300),
+                normalizeValue(task.priority(), TASK_PRIORITIES, "P1"),
+                clampDays(task.suggestedDays()),
+                truncate(defaultText(task.verificationMethod(), "完成后进行一次针对性自测"), 500),
+                "PENDING",
+                safeRequirementIds(task.relatedRequirementIds())
+            ));
+            if (normalized.size() >= 12) {
+                break;
+            }
+        }
+        return normalized;
+    }
+
+    private List<PreparationTaskDTO> readPreparationTasks(String json) {
+        if (json == null || json.isBlank()) {
+            return List.of();
+        }
+        try {
+            return objectMapper.readValue(json, new TypeReference<>() {
+            });
+        } catch (JacksonException e) {
+            log.warn("读取结构化准备任务失败: {}", e.getMessage());
+            return List.of();
+        }
+    }
+
+    private List<String> safeRequirementIds(List<String> requirementIds) {
+        if (requirementIds == null) {
+            return List.of();
+        }
+        return requirementIds.stream()
+            .filter(item -> item != null && !item.isBlank())
+            .map(String::trim)
+            .map(item -> truncate(item, 40))
+            .distinct()
+            .limit(6)
+            .toList();
+    }
+
+    private List<RequirementEvidenceDTO> readEvidenceMappings(String json) {
+        if (json == null || json.isBlank()) {
+            return List.of();
+        }
+        try {
+            return objectMapper.readValue(json, new TypeReference<>() {
+            });
+        } catch (JacksonException e) {
+            log.warn("读取岗位证据矩阵失败: {}", e.getMessage());
+            return List.of();
+        }
     }
 
     private String writeList(List<String> items) {
@@ -313,6 +440,50 @@ public class ResumeImprovementPlanService {
             sb.append("- ").append(item).append('\n');
         }
         sb.append('\n');
+    }
+
+    private void appendEvidenceMatrix(
+        StringBuilder sb,
+        List<RequirementEvidenceDTO> mappings
+    ) {
+        if (mappings.isEmpty()) {
+            return;
+        }
+        sb.append("### JD 要求—简历证据矩阵\n");
+        for (RequirementEvidenceDTO mapping : mappings.stream().limit(10).toList()) {
+            JdRequirementDTO requirement = mapping.requirement();
+            if (requirement == null) {
+                continue;
+            }
+            sb.append("- [").append(requirement.id()).append("] ")
+                .append(requirement.description())
+                .append(" | 重要度=").append(requirement.importance())
+                .append(" | 覆盖=").append(mapping.coverageType()).append('\n');
+            sb.append("  - JD 原文：").append(requirement.sourceQuote()).append('\n');
+            if (mapping.resumeEvidence() != null) {
+                for (ResumeEvidenceDTO evidence : mapping.resumeEvidence()) {
+                    sb.append("  - 简历证据[").append(evidence.sourceLocation()).append("]：")
+                        .append(evidence.quote()).append('\n');
+                }
+            }
+            sb.append("  - 建议：").append(mapping.recommendedAction()).append('\n');
+        }
+        sb.append('\n');
+    }
+
+    private int clampDays(Integer days) {
+        if (days == null) {
+            return 3;
+        }
+        return Math.max(1, Math.min(30, days));
+    }
+
+    private String normalizeValue(String value, Set<String> supported, String fallback) {
+        if (value == null) {
+            return fallback;
+        }
+        String normalized = value.trim().toUpperCase();
+        return supported.contains(normalized) ? normalized : fallback;
     }
 
     private int clampScore(Integer score) {

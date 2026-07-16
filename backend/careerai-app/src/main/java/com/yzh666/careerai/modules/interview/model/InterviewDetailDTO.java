@@ -1,5 +1,6 @@
 package com.yzh666.careerai.modules.interview.model;
 
+import com.yzh666.careerai.common.agent.tool.AgentInterviewTurnEvaluation;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -24,6 +25,10 @@ public record InterviewDetailDTO(
     List<String> improvements,
     InterviewReportDTO.JobEvaluation jobEvaluation,
     List<Object> referenceAnswers,
+    String endReason,
+    String completionType,
+    List<String> coveredTargets,
+    List<String> unverifiedTargets,
     List<AnswerDetailDTO> answers
 ) {
     /**
@@ -38,6 +43,9 @@ public record InterviewDetailDTO(
         String feedback,
         String referenceAnswer,
         List<String> keyPoints,
+        AgentInterviewTurnEvaluation evaluation,
+        String agentAction,
+        String decisionRationale,
         LocalDateTime answeredAt
     ) {}
 }

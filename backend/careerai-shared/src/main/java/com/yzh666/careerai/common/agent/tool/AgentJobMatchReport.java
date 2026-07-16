@@ -18,6 +18,7 @@ public record AgentJobMatchReport(
     List<String> matchedHighlights,
     List<String> gaps,
     List<String> actionItems,
+    List<AgentRequirementEvidence> evidenceMappings,
     LocalDateTime createdAt
 ) {
 }

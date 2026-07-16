@@ -1,16 +1,24 @@
 package com.yzh666.careerai.modules.interview.service;
 
 import com.yzh666.careerai.common.constant.CommonConstants.InterviewDefaults;
+import com.yzh666.careerai.common.agent.tool.AgentInterviewDecision;
+import com.yzh666.careerai.common.agent.tool.AgentInterviewTurnEvaluation;
 import com.yzh666.careerai.common.exception.BusinessException;
 import com.yzh666.careerai.common.exception.ErrorCode;
 import com.yzh666.careerai.common.model.AsyncTaskStatus;
 import com.yzh666.careerai.modules.interview.model.HistoricalQuestion;
 import com.yzh666.careerai.modules.interview.model.InterviewAnswerEntity;
+import com.yzh666.careerai.modules.interview.model.InterviewBlueprintDTO;
+import com.yzh666.careerai.modules.interview.model.InterviewCompletionSnapshotDTO;
 import com.yzh666.careerai.modules.interview.model.InterviewQuestionDTO;
+import com.yzh666.careerai.modules.interview.model.InterviewQuestionRecordEntity;
 import com.yzh666.careerai.modules.interview.model.InterviewReportDTO;
 import com.yzh666.careerai.modules.interview.model.InterviewSessionEntity;
+import com.yzh666.careerai.modules.interview.model.TurnEvaluationEvidenceDTO;
 import com.yzh666.careerai.modules.interview.repository.InterviewAnswerRepository;
 import com.yzh666.careerai.modules.interview.repository.InterviewSessionRepository;
+import com.yzh666.careerai.modules.interview.repository.InterviewQuestionRecordRepository;
+import com.yzh666.careerai.modules.interview.skill.InterviewSkillService.CategoryDTO;
 import com.yzh666.careerai.modules.resume.model.ResumeEntity;
 import com.yzh666.careerai.modules.resume.repository.ResumeRepository;
 import com.yzh666.careerai.modules.user.service.CurrentUserService;
@@ -24,6 +32,7 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.time.LocalDateTime;
 import java.util.LinkedHashSet;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -38,6 +47,7 @@ public class InterviewPersistenceService {
     
     private final InterviewSessionRepository sessionRepository;
     private final InterviewAnswerRepository answerRepository;
+    private final InterviewQuestionRecordRepository questionRecordRepository;
     private final ResumeRepository resumeRepository;
     private final ObjectMapper objectMapper;
     private final CurrentUserService currentUserService;
@@ -53,13 +63,20 @@ public class InterviewPersistenceService {
                                               String skillId,
                                               String difficulty,
                                               Long jobId,
-                                              Long matchReportId) {
+                                              Long matchReportId,
+                                              InterviewBlueprintDTO blueprint,
+                                              String agentCreationKey,
+                                              String resumeTextSnapshot,
+                                              String jdTextSnapshot,
+                                              List<CategoryDTO> customCategories) {
         try {
             Long userId = currentUserService.currentUserId();
             InterviewSessionEntity session = new InterviewSessionEntity();
             session.setUserId(userId);
             session.setSessionId(sessionId);
             session.setTotalQuestions(totalQuestions);
+            session.setPlannedMainQuestions(blueprint == null
+                ? totalQuestions : blueprint.questionCount());
             session.setCurrentQuestionIndex(0);
             session.setStatus(InterviewSessionEntity.SessionStatus.CREATED);
             session.setQuestionsJson(objectMapper.writeValueAsString(questions));
@@ -68,6 +85,12 @@ public class InterviewPersistenceService {
             session.setDifficulty(difficulty != null ? difficulty : InterviewDefaults.DIFFICULTY);
             session.setJobId(jobId);
             session.setMatchReportId(matchReportId);
+            session.setInterviewBlueprintJson(blueprint == null
+                ? null : objectMapper.writeValueAsString(blueprint));
+            session.setAgentCreationKey(agentCreationKey);
+            session.setResumeTextSnapshot(resumeTextSnapshot);
+            session.setJdTextSnapshot(jdTextSnapshot);
+            session.setCustomCategoriesJson(writeNullableJson(customCategories));
 
             // 简历可选：有 resumeId 则关联简历
             if (resumeId != null) {
@@ -77,6 +100,9 @@ public class InterviewPersistenceService {
             }
 
             InterviewSessionEntity saved = sessionRepository.save(session);
+            questionRecordRepository.saveAll(questions.stream()
+                .map(question -> toQuestionRecord(saved, question, difficulty, resumeId))
+                .toList());
             log.info(
                 "面试会话已保存: sessionId={}, userId={}, skillId={}, resumeId={}, jobId={}, matchReportId={}",
                 sessionId,
@@ -91,6 +117,42 @@ public class InterviewPersistenceService {
         } catch (JacksonException e) {
             log.error("序列化问题列表失败: {}", e.getMessage(), e);
             throw new BusinessException(ErrorCode.INTERNAL_ERROR, "保存会话失败");
+        }
+    }
+
+    /** 增量追加一道已经 Java 生成的题目，同步维护会话快照和题目明细。 */
+    @Transactional(rollbackFor = Exception.class)
+    public void appendQuestion(
+            String sessionId,
+            List<InterviewQuestionDTO> questions,
+            InterviewQuestionDTO newQuestion,
+            String difficulty) {
+        InterviewSessionEntity session = findBySessionId(sessionId)
+            .orElseThrow(() -> new BusinessException(ErrorCode.INTERVIEW_SESSION_NOT_FOUND));
+        session.setQuestionsJson(writeJson(questions));
+        session.setDifficulty(difficulty);
+        sessionRepository.save(session);
+        if (questionRecordRepository
+                .findBySession_SessionIdAndQuestionIndex(sessionId, newQuestion.questionIndex())
+                .isEmpty()) {
+            questionRecordRepository.save(toQuestionRecord(
+                session,
+                newQuestion,
+                difficulty,
+                session.getResumeId()));
+        }
+    }
+
+    public List<CategoryDTO> getCustomCategories(String sessionId) {
+        InterviewSessionEntity session = findBySessionId(sessionId)
+            .orElseThrow(() -> new BusinessException(ErrorCode.INTERVIEW_SESSION_NOT_FOUND));
+        if (session.getCustomCategoriesJson() == null || session.getCustomCategoriesJson().isBlank()) {
+            return List.of();
+        }
+        try {
+            return objectMapper.readValue(session.getCustomCategoriesJson(), new TypeReference<>() {});
+        } catch (JacksonException e) {
+            throw new BusinessException(ErrorCode.INTERNAL_ERROR, "读取自定义面试分类失败");
         }
     }
     
@@ -151,6 +213,44 @@ public class InterviewPersistenceService {
     public InterviewAnswerEntity saveAnswer(String sessionId, int questionIndex,
                                             String question, String category,
                                             String userAnswer, int score, String feedback) {
+        return saveTurn(sessionId, questionIndex, question, category, userAnswer, score, feedback,
+            null, null, null);
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public InterviewAnswerEntity saveAdaptiveTurn(
+            String sessionId,
+            int questionIndex,
+            String question,
+            String category,
+            String userAnswer,
+            int score,
+            String feedback,
+            AgentInterviewTurnEvaluation evaluation,
+            String agentAction,
+            String decisionRationale) {
+        return saveTurn(sessionId, questionIndex, question, category, userAnswer, score, feedback,
+            evaluation, agentAction, decisionRationale);
+    }
+
+    /** 保存跳过、继续或结束操作；这些操作没有回答内容，也不会产生分数。 */
+    @Transactional(rollbackFor = Exception.class)
+    public InterviewAnswerEntity saveControlTurn(
+            String sessionId,
+            int questionIndex,
+            String question,
+            String category,
+            String intent,
+            String rationale) {
+        return saveTurn(sessionId, questionIndex, question, category, null, null,
+            "本轮未评分", null, intent, rationale);
+    }
+
+    private InterviewAnswerEntity saveTurn(String sessionId, int questionIndex,
+                                            String question, String category,
+                                            String userAnswer, Integer score, String feedback,
+                                            AgentInterviewTurnEvaluation evaluation,
+                                            String agentAction, String decisionRationale) {
         Optional<InterviewSessionEntity> sessionOpt = findBySessionId(sessionId);
         if (sessionOpt.isEmpty()) {
             throw new BusinessException(ErrorCode.INTERVIEW_SESSION_NOT_FOUND);
@@ -170,12 +270,60 @@ public class InterviewPersistenceService {
         answer.setUserAnswer(userAnswer);
         answer.setScore(score);
         answer.setFeedback(feedback);
+        answer.setEvaluationJson(writeNullableJson(evaluation));
+        answer.setAgentAction(agentAction);
+        answer.setDecisionRationale(decisionRationale);
+        questionRecordRepository.findBySession_SessionIdAndQuestionIndex(sessionId, questionIndex)
+            .ifPresent(answer::setQuestionRecord);
 
         InterviewAnswerEntity saved = answerRepository.save(answer);
         log.info("面试答案已保存: sessionId={}, questionIndex={}, score={}", 
                 sessionId, questionIndex, score);
         
         return saved;
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public void completeSession(
+            String sessionId,
+            InterviewSessionEntity.EndReason endReason,
+            InterviewSessionEntity.CompletionType completionType,
+            List<String> coveredTargets,
+            List<String> unverifiedTargets) {
+        InterviewSessionEntity session = findBySessionId(sessionId)
+            .orElseThrow(() -> new BusinessException(ErrorCode.INTERVIEW_SESSION_NOT_FOUND));
+        session.setStatus(InterviewSessionEntity.SessionStatus.COMPLETED);
+        session.setCompletedAt(LocalDateTime.now());
+        session.setEndReason(endReason);
+        session.setCompletionType(completionType);
+        session.setCoveredTargetsJson(writeJson(coveredTargets));
+        session.setUnverifiedTargetsJson(writeJson(unverifiedTargets));
+        sessionRepository.save(session);
+    }
+
+    public List<TurnEvaluationEvidenceDTO> getTurnEvaluations(String sessionId) {
+        return answerRepository.findBySession_SessionIdOrderByQuestionIndex(sessionId).stream()
+            .filter(answer -> answer.getEvaluationJson() != null
+                && !answer.getEvaluationJson().isBlank())
+            .map(answer -> new TurnEvaluationEvidenceDTO(
+                answer.getQuestionIndex(),
+                answer.getQuestion(),
+                answer.getCategory(),
+                answer.getFeedback(),
+                readTurnEvaluation(answer.getEvaluationJson())))
+            .filter(item -> item.evaluation() != null)
+            .toList();
+    }
+
+    public InterviewCompletionSnapshotDTO getCompletionSnapshot(String sessionId) {
+        InterviewSessionEntity session = findBySessionId(sessionId)
+            .orElseThrow(() -> new BusinessException(ErrorCode.INTERVIEW_SESSION_NOT_FOUND));
+        return new InterviewCompletionSnapshotDTO(
+            session.getEndReason() == null ? null : session.getEndReason().name(),
+            session.getCompletionType() == null ? null : session.getCompletionType().name(),
+            readStringList(session.getCoveredTargetsJson()),
+            readStringList(session.getUnverifiedTargetsJson())
+        );
     }
     
     /**
@@ -260,6 +408,7 @@ public class InterviewPersistenceService {
 
         } catch (JacksonException e) {
             log.error("序列化报告失败: {}", e.getMessage(), e);
+            throw new BusinessException(ErrorCode.INTERVIEW_EVALUATION_FAILED, "保存面试报告失败");
         }
     }
     
@@ -268,6 +417,12 @@ public class InterviewPersistenceService {
      */
     public Optional<InterviewSessionEntity> findBySessionId(String sessionId) {
         return sessionRepository.findBySessionIdAndUserId(sessionId, currentUserService.currentUserId());
+    }
+
+    public Optional<InterviewSessionEntity> findByAgentCreationKey(String agentCreationKey) {
+        return sessionRepository.findByAgentCreationKeyAndUserId(
+            agentCreationKey,
+            currentUserService.currentUserId());
     }
     
     /**
@@ -344,6 +499,129 @@ public class InterviewPersistenceService {
      */
     public List<InterviewAnswerEntity> findAnswersBySessionId(String sessionId) {
         return answerRepository.findBySession_SessionIdOrderByQuestionIndex(sessionId);
+    }
+
+    /** 读取已执行的 Agent 面试决策，历史会话默认返回空列表。 */
+    public List<AgentInterviewDecision> getAgentDecisions(String sessionId) {
+        InterviewSessionEntity session = findBySessionId(sessionId)
+            .orElseThrow(() -> new BusinessException(ErrorCode.INTERVIEW_SESSION_NOT_FOUND));
+        if (session.getAgentDecisionsJson() == null || session.getAgentDecisionsJson().isBlank()) {
+            return List.of();
+        }
+        try {
+            return objectMapper.readValue(session.getAgentDecisionsJson(), new TypeReference<>() {});
+        } catch (JacksonException e) {
+            log.warn("读取 Agent 面试决策失败: sessionId={}, error={}", sessionId, e.getMessage());
+            return List.of();
+        }
+    }
+
+    /** 读取已校验的面试蓝图，兼容历史会话。 */
+    public InterviewBlueprintDTO getInterviewBlueprint(String sessionId) {
+        InterviewSessionEntity session = findBySessionId(sessionId)
+            .orElseThrow(() -> new BusinessException(ErrorCode.INTERVIEW_SESSION_NOT_FOUND));
+        if (session.getInterviewBlueprintJson() == null || session.getInterviewBlueprintJson().isBlank()) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(session.getInterviewBlueprintJson(), InterviewBlueprintDTO.class);
+        } catch (JacksonException e) {
+            log.warn("读取面试蓝图失败: sessionId={}, error={}", sessionId, e.getMessage());
+            return null;
+        }
+    }
+
+    /** 同一问题只保存一次决策，使重试具有业务幂等性。 */
+    @Transactional(rollbackFor = Exception.class)
+    public AgentInterviewDecision appendAgentDecision(
+            String sessionId,
+            AgentInterviewDecision decision) {
+        InterviewSessionEntity session = findBySessionId(sessionId)
+            .orElseThrow(() -> new BusinessException(ErrorCode.INTERVIEW_SESSION_NOT_FOUND));
+        List<AgentInterviewDecision> decisions = new ArrayList<>(getAgentDecisions(sessionId));
+        Optional<AgentInterviewDecision> existing = decisions.stream()
+            .filter(item -> item.questionIndex() == decision.questionIndex())
+            .findFirst();
+        if (existing.isPresent()) {
+            return existing.get();
+        }
+        try {
+            decisions.add(decision);
+            session.setAgentDecisionsJson(objectMapper.writeValueAsString(decisions));
+            sessionRepository.save(session);
+            return decision;
+        } catch (JacksonException e) {
+            throw new BusinessException(ErrorCode.INTERNAL_ERROR, "保存 Agent 面试决策失败");
+        }
+    }
+
+    private InterviewQuestionRecordEntity toQuestionRecord(
+            InterviewSessionEntity session,
+            InterviewQuestionDTO question,
+            String difficulty,
+            Long resumeId) {
+        InterviewQuestionRecordEntity record = new InterviewQuestionRecordEntity();
+        record.setSession(session);
+        record.setQuestionIndex(question.questionIndex());
+        record.setQuestion(question.question());
+        record.setSkillKey(question.type());
+        record.setCategory(question.category());
+        record.setDifficulty(difficulty);
+        record.setFollowUp(question.isFollowUp());
+        record.setParentQuestionIndex(question.parentQuestionIndex());
+        record.setRequirementId(question.requirementId());
+        if (question.isFollowUp()) {
+            record.setStage("FOLLOW_UP");
+        } else if (question.requirementId() != null) {
+            record.setStage("JOB_REQUIREMENT");
+        } else if (resumeId != null) {
+            record.setStage("PROJECT_DEFENSE");
+        } else {
+            record.setStage("CORE_SKILL");
+        }
+        if (question.requirementId() != null) {
+            record.setSourceType("JD_REQUIREMENT");
+            record.setSourceRef(question.requirementId());
+        } else if (resumeId != null) {
+            record.setSourceType("RESUME");
+            record.setSourceRef(String.valueOf(resumeId));
+        } else {
+            record.setSourceType("SKILL");
+            record.setSourceRef(question.type());
+        }
+        return record;
+    }
+
+    private String writeNullableJson(Object value) {
+        return value == null ? null : writeJson(value);
+    }
+
+    private String writeJson(Object value) {
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (JacksonException e) {
+            throw new BusinessException(ErrorCode.INTERNAL_ERROR, "序列化面试过程数据失败");
+        }
+    }
+
+    private AgentInterviewTurnEvaluation readTurnEvaluation(String json) {
+        try {
+            return objectMapper.readValue(json, AgentInterviewTurnEvaluation.class);
+        } catch (JacksonException e) {
+            log.warn("读取单轮多维评价失败: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    private List<String> readStringList(String json) {
+        if (json == null || json.isBlank()) {
+            return List.of();
+        }
+        try {
+            return objectMapper.readValue(json, new TypeReference<>() {});
+        } catch (JacksonException e) {
+            return List.of();
+        }
     }
 
     private static final int MAX_HISTORICAL_QUESTIONS = 60;

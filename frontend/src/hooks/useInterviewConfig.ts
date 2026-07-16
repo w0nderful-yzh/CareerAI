@@ -5,6 +5,7 @@ import { getSkillIcon } from '../utils/skillIcons';
 
 export type InterviewMode = 'text';
 export type Difficulty = 'junior' | 'mid' | 'senior';
+export type TrainingMode = 'GENERAL' | 'FOCUS_DRILL' | 'RESUME_DEFENSE';
 
 export const DIFFICULTY_OPTIONS: { value: Difficulty; label: string; desc: string }[] = [
   { value: 'junior', label: '校招', desc: '0-1 年' },
@@ -34,6 +35,8 @@ export interface InterviewConfigState {
   parsingJd: boolean;
   jdNeedsReparse: boolean;
   isCustomStartDisabled: boolean;
+  trainingMode: TrainingMode;
+  userFocus: string;
 }
 
 export function useInterviewConfig(options?: {
@@ -56,6 +59,8 @@ export function useInterviewConfig(options?: {
   const [customJdText, setCustomJdText] = useState('');
   const [parsedCustomJdText, setParsedCustomJdText] = useState('');
   const [customCategories, setCustomCategories] = useState<CategoryDTO[]>([]);
+  const [trainingMode, setTrainingMode] = useState<TrainingMode>('GENERAL');
+  const [userFocus, setUserFocus] = useState('');
   const [parsingJd, setParsingJd] = useState(false);
 
   const isCustomSkill = skillId === CUSTOM_SKILL_ID;
@@ -81,8 +86,10 @@ export function useInterviewConfig(options?: {
     try {
       const data = await historyApi.getResumes();
       setResumes(data);
+      return data;
     } catch (err) {
       console.error('Failed to load resumes:', err);
+      return [];
     }
   };
 
@@ -135,6 +142,8 @@ export function useInterviewConfig(options?: {
     jdNeedsReparse,
     isCustomStartDisabled,
     isCustomSkill,
+    trainingMode, setTrainingMode,
+    userFocus, setUserFocus,
     // Actions
     loadSkills,
     loadResumes,

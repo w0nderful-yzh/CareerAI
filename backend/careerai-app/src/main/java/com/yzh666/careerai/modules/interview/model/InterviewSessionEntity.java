@@ -60,6 +60,9 @@ public class InterviewSessionEntity {
     
     // 当前问题索引
     private Integer currentQuestionIndex = 0;
+
+    // 用户配置的主问题预算，不包含动态追问。
+    private Integer plannedMainQuestions;
     
     // 会话状态
     @Enumerated(EnumType.STRING)
@@ -69,6 +72,16 @@ public class InterviewSessionEntity {
     // 问题列表 (JSON格式)
     @Column(columnDefinition = "TEXT")
     private String questionsJson;
+
+    // Agent 增量出题所需的业务快照，避免 Redis 过期后丢失上下文。
+    @Column(columnDefinition = "TEXT")
+    private String resumeTextSnapshot;
+
+    @Column(columnDefinition = "TEXT")
+    private String jdTextSnapshot;
+
+    @Column(columnDefinition = "TEXT")
+    private String customCategoriesJson;
     
     // 总分 (0-100)
     private Integer overallScore;
@@ -92,6 +105,32 @@ public class InterviewSessionEntity {
     // 参考答案 (JSON)
     @Column(columnDefinition = "TEXT")
     private String referenceAnswersJson;
+
+    // Agent 每轮追问/换题/调难度决策（JSON），用于恢复和审计
+    @Column(columnDefinition = "TEXT")
+    private String agentDecisionsJson;
+
+    // 经 Java 校验后的出题蓝图（JSON）
+    @Column(columnDefinition = "TEXT")
+    private String interviewBlueprintJson;
+
+    // Agent 写操作幂等键，避免网络重试重复创建面试会话
+    @Column(unique = true, length = 160)
+    private String agentCreationKey;
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 32)
+    private EndReason endReason;
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 16)
+    private CompletionType completionType;
+
+    @Column(columnDefinition = "TEXT")
+    private String coveredTargetsJson;
+
+    @Column(columnDefinition = "TEXT")
+    private String unverifiedTargetsJson;
     
     // 面试答案记录
     @OneToMany(mappedBy = "session", cascade = CascadeType.ALL, orphanRemoval = true)
@@ -122,6 +161,23 @@ public class InterviewSessionEntity {
         IN_PROGRESS,  // 面试进行中
         COMPLETED,    // 面试已完成
         EVALUATED     // 已生成评估报告
+    }
+
+    public enum EndReason {
+        USER_REQUESTED,
+        MANUAL_BUTTON,
+        PLAN_COMPLETED,
+        QUESTION_LIMIT,
+        TIME_LIMIT,
+        SUFFICIENT_EVIDENCE,
+        LOW_INFORMATION,
+        OFF_TOPIC,
+        SYSTEM_ERROR
+    }
+
+    public enum CompletionType {
+        COMPLETE,
+        PARTIAL
     }
     
     @PrePersist
@@ -181,6 +237,14 @@ public class InterviewSessionEntity {
     public void setCurrentQuestionIndex(Integer currentQuestionIndex) {
         this.currentQuestionIndex = currentQuestionIndex;
     }
+
+    public Integer getPlannedMainQuestions() {
+        return plannedMainQuestions;
+    }
+
+    public void setPlannedMainQuestions(Integer plannedMainQuestions) {
+        this.plannedMainQuestions = plannedMainQuestions;
+    }
     
     public SessionStatus getStatus() {
         return status;
@@ -196,6 +260,30 @@ public class InterviewSessionEntity {
     
     public void setQuestionsJson(String questionsJson) {
         this.questionsJson = questionsJson;
+    }
+
+    public String getResumeTextSnapshot() {
+        return resumeTextSnapshot;
+    }
+
+    public void setResumeTextSnapshot(String resumeTextSnapshot) {
+        this.resumeTextSnapshot = resumeTextSnapshot;
+    }
+
+    public String getJdTextSnapshot() {
+        return jdTextSnapshot;
+    }
+
+    public void setJdTextSnapshot(String jdTextSnapshot) {
+        this.jdTextSnapshot = jdTextSnapshot;
+    }
+
+    public String getCustomCategoriesJson() {
+        return customCategoriesJson;
+    }
+
+    public void setCustomCategoriesJson(String customCategoriesJson) {
+        this.customCategoriesJson = customCategoriesJson;
     }
     
     public Integer getOverallScore() {
@@ -244,6 +332,62 @@ public class InterviewSessionEntity {
     
     public void setReferenceAnswersJson(String referenceAnswersJson) {
         this.referenceAnswersJson = referenceAnswersJson;
+    }
+
+    public String getAgentDecisionsJson() {
+        return agentDecisionsJson;
+    }
+
+    public void setAgentDecisionsJson(String agentDecisionsJson) {
+        this.agentDecisionsJson = agentDecisionsJson;
+    }
+
+    public String getInterviewBlueprintJson() {
+        return interviewBlueprintJson;
+    }
+
+    public void setInterviewBlueprintJson(String interviewBlueprintJson) {
+        this.interviewBlueprintJson = interviewBlueprintJson;
+    }
+
+    public String getAgentCreationKey() {
+        return agentCreationKey;
+    }
+
+    public void setAgentCreationKey(String agentCreationKey) {
+        this.agentCreationKey = agentCreationKey;
+    }
+
+    public EndReason getEndReason() {
+        return endReason;
+    }
+
+    public void setEndReason(EndReason endReason) {
+        this.endReason = endReason;
+    }
+
+    public CompletionType getCompletionType() {
+        return completionType;
+    }
+
+    public void setCompletionType(CompletionType completionType) {
+        this.completionType = completionType;
+    }
+
+    public String getCoveredTargetsJson() {
+        return coveredTargetsJson;
+    }
+
+    public void setCoveredTargetsJson(String coveredTargetsJson) {
+        this.coveredTargetsJson = coveredTargetsJson;
+    }
+
+    public String getUnverifiedTargetsJson() {
+        return unverifiedTargetsJson;
+    }
+
+    public void setUnverifiedTargetsJson(String unverifiedTargetsJson) {
+        this.unverifiedTargetsJson = unverifiedTargetsJson;
     }
     
     public List<InterviewAnswerEntity> getAnswers() {

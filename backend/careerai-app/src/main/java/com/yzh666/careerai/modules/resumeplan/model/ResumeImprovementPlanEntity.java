@@ -73,6 +73,10 @@ public class ResumeImprovementPlanEntity {
     @Column(columnDefinition = "TEXT")
     private String learningTasksJson;
 
+    /** 将散落的建议收敛为带优先级、周期和验证方式的任务。 */
+    @Column(columnDefinition = "TEXT")
+    private String preparationTasksJson;
+
     /** 仅 Agent 写操作使用，用于避免重试时重复生成计划。 */
     @Column(length = 120)
     private String agentIdempotencyKey;

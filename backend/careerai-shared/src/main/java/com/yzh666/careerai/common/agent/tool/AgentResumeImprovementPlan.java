@@ -18,6 +18,7 @@ public record AgentResumeImprovementPlan(
     List<String> projectUpgradeTasks,
     List<String> interviewPracticeTasks,
     List<String> learningTasks,
+    List<AgentPreparationTask> preparationTasks,
     LocalDateTime createdAt
 ) {
 }

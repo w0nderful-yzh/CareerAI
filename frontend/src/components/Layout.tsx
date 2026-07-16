@@ -1,6 +1,6 @@
 import {Link, Outlet, useLocation, useNavigate} from 'react-router-dom';
 import {motion} from 'framer-motion';
-import {Bot, BriefcaseBusiness, ChevronRight, FileStack, LogOut, Moon, Settings, Sparkles, Sun, Users,} from 'lucide-react';
+import {BriefcaseBusiness, ChevronRight, FileStack, LogOut, Moon, Settings, Sparkles, Sun, Users,} from 'lucide-react';
 import {useTheme} from '../hooks/useTheme';
 import {useState} from 'react';
 import UnifiedInterviewModal, {UnifiedInterviewConfig} from './UnifiedInterviewModal';
@@ -54,6 +54,8 @@ export default function Layout() {
           difficulty: config.difficulty,
           questionCount: config.questionCount,
           llmProvider: config.llmProvider,
+          trainingMode: config.trainingMode,
+          userFocus: config.userFocus,
         },
       },
     });
@@ -68,13 +70,12 @@ export default function Layout() {
   const navGroups: NavGroup[] = [
     {
       id: 'interview',
-      title: '岗位准备与面试',
+      title: '求职准备',
       items: [
-        { id: 'agent', path: '/agent', label: 'Agent 工作台', icon: Bot, description: '规划与业务编排' },
-        { id: 'resumes', path: '/history', label: '简历管理', icon: FileStack, description: '管理简历，AI 分析' },
-        { id: 'jobs', path: '/jobs', label: '岗位中心', icon: BriefcaseBusiness, description: 'JD 解析与匹配' },
-        { id: 'interview-hub', path: '/interview-hub', label: '模拟面试', icon: Sparkles, description: '岗位定向练习' },
-        { id: 'interviews', path: '/interviews', label: '面试记录', icon: Users, description: '训练历史与评分' },
+        { id: 'jobs', path: '/jobs', label: '目标岗位', icon: BriefcaseBusiness, description: 'JD、匹配与准备计划' },
+        { id: 'resumes', path: '/history', label: '我的简历', icon: FileStack, description: '简历证据与版本' },
+        { id: 'interview-hub', path: '/interview-hub', label: '模拟面试', icon: Sparkles, description: '岗位定向与专项训练' },
+        { id: 'interviews', path: '/interviews', label: '训练记录', icon: Users, description: '评分、证据与改进项' },
       ],
     },
     {
@@ -109,7 +110,7 @@ export default function Layout() {
       <aside className="w-64 bg-white dark:bg-slate-900 border-r border-slate-100 dark:border-slate-700 fixed h-screen left-0 top-0 z-50 flex flex-col">
         {/* Logo */}
         <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
-          <Link to="/history" className="flex items-center gap-3">
+          <Link to="/jobs" className="flex items-center gap-3">
             <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-primary-500/30">
               <Sparkles className="w-5 h-5" />
             </div>

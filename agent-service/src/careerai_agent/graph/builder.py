@@ -9,6 +9,12 @@ from pydantic import ValidationError
 
 from careerai_agent.domain.models import RunStatus, StepStatus
 from careerai_agent.graph.state import CareerAgentState, GraphRuntimeContext
+from careerai_agent.services.decision import (
+    DecisionMakingError,
+    PreparationAction,
+    PreparationDecision,
+    PreparationDecisionMaker,
+)
 from careerai_agent.services.planner import AgentPlanner
 from careerai_agent.tools.business import build_business_tools, tool_result
 from careerai_agent.tools.client import BusinessToolClient, BusinessToolError, ToolCallContext
@@ -25,6 +31,7 @@ from careerai_agent.tools.models import (
 def build_graph(
     checkpointer: BaseCheckpointSaver[str],
     planner: AgentPlanner,
+    decision_maker: PreparationDecisionMaker,
     business_client: BusinessToolClient,
 ) -> CompiledStateGraph[
     CareerAgentState,
@@ -216,7 +223,19 @@ def build_graph(
     ) -> CareerAgentState:
         report_id = state["match_report_id"]
         if report_id is None:
-            return _failed_message(state, "create_improvement_plan", "缺少匹配报告 ID", 3)
+            return _failed_message(state, "create_improvement_plan", "缺少匹配报告 ID", 4)
+
+        try:
+            decision = _get_preparation_decision(state["artifacts"])
+        except ValidationError as exc:
+            return _failed_message(
+                state,
+                "create_improvement_plan",
+                f"缺少有效的 Agent 准备策略：{exc}",
+                4,
+            )
+        if decision is None:
+            return _failed_message(state, "create_improvement_plan", "缺少 Agent 准备策略", 4)
 
         tools = build_business_tools(
             business_client,
@@ -224,18 +243,27 @@ def build_graph(
         )
         try:
             plan = tool_result(
-                await tools.create_improvement_plan.ainvoke({"match_report_id": report_id}),
+                await tools.create_improvement_plan.ainvoke(
+                    {
+                        "match_report_id": report_id,
+                        "strategy": decision.strategy.value,
+                        "rationale": decision.rationale,
+                        "prioritized_gaps": decision.prioritized_gaps,
+                        "supporting_evidence": decision.supporting_evidence,
+                        "interview_focus": decision.interview_focus,
+                    }
+                ),
                 ResumeImprovementPlan,
             )
         except (BusinessToolError, httpx.HTTPError, ValidationError) as exc:
-            return _failed(state, "create_improvement_plan", exc, plan_index=3)
+            return _failed(state, "create_improvement_plan", exc, plan_index=4)
 
         return {
             **state,
             "status": RunStatus.COMPLETED.value,
             "improvement_plan_id": plan.id,
             "pause_reason": None,
-            "plan": _complete_remaining(_set_plan_status(state["plan"], 3, StepStatus.COMPLETED)),
+            "plan": _complete_remaining(_set_plan_status(state["plan"], 4, StepStatus.COMPLETED)),
             "artifacts": _upsert_artifact(
                 state["artifacts"],
                 {
@@ -243,6 +271,54 @@ def build_graph(
                     **plan.model_dump(mode="json", by_alias=True),
                 },
             ),
+        }
+
+    async def decide_preparation_strategy(state: CareerAgentState) -> CareerAgentState:
+        report_id = state["match_report_id"]
+        if report_id is None:
+            return _failed_message(state, "decide_preparation_strategy", "缺少匹配报告 ID", 3)
+
+        report_artifact = _find_artifact(state["artifacts"], "job_match_report")
+        if report_artifact is None:
+            return _failed_message(state, "decide_preparation_strategy", "缺少匹配报告证据", 3)
+
+        try:
+            report_payload = {key: value for key, value in report_artifact.items() if key != "type"}
+            report = JobMatchReport.model_validate(report_payload)
+            decision = await decision_maker.decide(
+                state["goal"],
+                state["constraints"],
+                report,
+            )
+        except (DecisionMakingError, ValidationError) as exc:
+            return _failed_message(state, "decide_preparation_strategy", str(exc), 3)
+
+        artifact = {
+            "type": "preparation_decision",
+            **decision.model_dump(mode="json", by_alias=True),
+            "selectedTool": (
+                "create_resume_improvement_plan"
+                if decision.action == PreparationAction.CREATE_IMPROVEMENT_PLAN
+                else None
+            ),
+        }
+        # 决策产物随 Checkpoint 持久化，前端据此解释 Agent 为什么调用或跳过写 Tool。
+        if decision.action == PreparationAction.COMPLETE_WITH_MATCH_REPORT:
+            plan = _set_plan_status(state["plan"], 3, StepStatus.COMPLETED)
+            plan = _set_plan_status(plan, 4, StepStatus.SKIPPED)
+            return {
+                **state,
+                "status": RunStatus.COMPLETED.value,
+                "pause_reason": None,
+                "plan": plan,
+                "artifacts": _upsert_artifact(state["artifacts"], artifact),
+            }
+        return {
+            **state,
+            "status": RunStatus.RUNNING.value,
+            "pause_reason": None,
+            "plan": _set_plan_status(state["plan"], 3, StepStatus.COMPLETED),
+            "artifacts": _upsert_artifact(state["artifacts"], artifact),
         }
 
     def route_from_dispatch(state: CareerAgentState) -> str:
@@ -260,6 +336,11 @@ def build_graph(
             return "start_job_match"
         if state["match_report_id"] is None:
             return "poll_job_match"
+        decision = _get_preparation_decision(state["artifacts"])
+        if decision is None:
+            return "decide_preparation_strategy"
+        if decision.action == PreparationAction.COMPLETE_WITH_MATCH_REPORT:
+            return "end"
         if state["improvement_plan_id"] is None:
             return "create_improvement_plan"
         return "end"
@@ -271,6 +352,11 @@ def build_graph(
         return "poll_job_match" if state["status"] == RunStatus.RUNNING.value else "end"
 
     def route_after_poll(state: CareerAgentState) -> str:
+        return (
+            "decide_preparation_strategy" if state["status"] == RunStatus.RUNNING.value else "end"
+        )
+
+    def route_after_decision(state: CareerAgentState) -> str:
         return "create_improvement_plan" if state["status"] == RunStatus.RUNNING.value else "end"
 
     builder = StateGraph(CareerAgentState, context_schema=GraphRuntimeContext)
@@ -279,6 +365,7 @@ def build_graph(
     builder.add_node("load_context", load_context)
     builder.add_node("start_job_match", start_job_match)
     builder.add_node("poll_job_match", poll_job_match)
+    builder.add_node("decide_preparation_strategy", decide_preparation_strategy)
     builder.add_node("create_improvement_plan", create_improvement_plan)
     builder.add_edge(START, "dispatch")
     builder.add_conditional_edges(
@@ -289,6 +376,7 @@ def build_graph(
             "load_context": "load_context",
             "start_job_match": "start_job_match",
             "poll_job_match": "poll_job_match",
+            "decide_preparation_strategy": "decide_preparation_strategy",
             "create_improvement_plan": "create_improvement_plan",
             "end": END,
         },
@@ -307,6 +395,11 @@ def build_graph(
     builder.add_conditional_edges(
         "poll_job_match",
         route_after_poll,
+        {"decide_preparation_strategy": "decide_preparation_strategy", "end": END},
+    )
+    builder.add_conditional_edges(
+        "decide_preparation_strategy",
+        route_after_decision,
         {"create_improvement_plan": "create_improvement_plan", "end": END},
     )
     builder.add_edge("create_improvement_plan", END)
@@ -361,6 +454,24 @@ def _upsert_artifact(
 ) -> list[dict[str, Any]]:
     artifact_type = artifact.get("type")
     return [item for item in artifacts if item.get("type") != artifact_type] + [artifact]
+
+
+def _find_artifact(
+    artifacts: list[dict[str, Any]],
+    artifact_type: str,
+) -> dict[str, Any] | None:
+    return next((item for item in artifacts if item.get("type") == artifact_type), None)
+
+
+def _get_preparation_decision(
+    artifacts: list[dict[str, Any]],
+) -> PreparationDecision | None:
+    artifact = _find_artifact(artifacts, "preparation_decision")
+    if artifact is None:
+        return None
+    return PreparationDecision.model_validate(
+        {key: value for key, value in artifact.items() if key not in {"type", "selectedTool"}}
+    )
 
 
 def _failed(

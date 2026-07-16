@@ -7,7 +7,10 @@ import com.yzh666.careerai.common.exception.ErrorCode;
 import com.yzh666.careerai.modules.job.model.JobEntity;
 import com.yzh666.careerai.modules.job.repository.JobRepository;
 import com.yzh666.careerai.modules.jobmatch.dto.CreateJobMatchRequest;
+import com.yzh666.careerai.modules.jobmatch.dto.JdRequirementDTO;
 import com.yzh666.careerai.modules.jobmatch.dto.JobMatchReportDTO;
+import com.yzh666.careerai.modules.jobmatch.dto.RequirementEvidenceDTO;
+import com.yzh666.careerai.modules.jobmatch.dto.ResumeEvidenceDTO;
 import com.yzh666.careerai.modules.jobmatch.model.JobMatchReportEntity;
 import com.yzh666.careerai.modules.jobmatch.repository.JobMatchReportRepository;
 import com.yzh666.careerai.modules.resume.model.ResumeEntity;
@@ -15,9 +18,11 @@ import com.yzh666.careerai.modules.resume.service.ResumePersistenceService;
 import com.yzh666.careerai.modules.user.service.CurrentUserService;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.prompt.PromptTemplate;
@@ -34,6 +39,14 @@ public class JobMatchService {
 
     private static final int MAX_RESUME_TEXT_LENGTH = 16_000;
     private static final int MAX_JD_TEXT_LENGTH = 12_000;
+    private static final Set<String> COVERAGE_TYPES = Set.of(
+        "SUPPORTED",
+        "EXPRESSION_GAP",
+        "EVIDENCE_GAP",
+        "CAPABILITY_GAP"
+    );
+    private static final Set<String> IMPORTANCE_LEVELS = Set.of("HIGH", "MEDIUM", "LOW");
+    private static final Set<String> EVIDENCE_STRENGTHS = Set.of("STRONG", "MODERATE", "WEAK");
 
     private final JobMatchReportRepository reportRepository;
     private final JobRepository jobRepository;
@@ -54,7 +67,8 @@ public class JobMatchService {
         String summary,
         List<String> matchedHighlights,
         List<String> gaps,
-        List<String> actionItems
+        List<String> actionItems,
+        List<RequirementEvidenceDTO> evidenceMappings
     ) {
     }
 
@@ -116,6 +130,7 @@ public class JobMatchService {
         entity.setMatchedHighlightsJson(writeList(analysis.matchedHighlights()));
         entity.setGapsJson(writeList(analysis.gaps()));
         entity.setActionItemsJson(writeList(analysis.actionItems()));
+        entity.setEvidenceMappingsJson(writeEvidenceMappings(analysis.evidenceMappings()));
 
         JobMatchReportEntity saved = reportRepository.save(entity);
         log.info(
@@ -163,6 +178,7 @@ public class JobMatchService {
         appendList(sb, "匹配亮点", readList(report.getMatchedHighlightsJson()));
         appendList(sb, "主要差距", readList(report.getGapsJson()));
         appendList(sb, "行动项", readList(report.getActionItemsJson()));
+        appendEvidenceMatrix(sb, readEvidenceMappings(report.getEvidenceMappingsJson()));
         return sb.toString();
     }
 
@@ -235,8 +251,82 @@ public class JobMatchService {
             readList(entity.getMatchedHighlightsJson()),
             readList(entity.getGapsJson()),
             readList(entity.getActionItemsJson()),
+            readEvidenceMappings(entity.getEvidenceMappingsJson()),
             entity.getCreatedAt()
         );
+    }
+
+    private String writeEvidenceMappings(List<RequirementEvidenceDTO> mappings) {
+        try {
+            return objectMapper.writeValueAsString(normalizeEvidenceMappings(mappings));
+        } catch (JacksonException e) {
+            throw new BusinessException(ErrorCode.JOB_MATCH_FAILED, "保存证据矩阵失败");
+        }
+    }
+
+    private List<RequirementEvidenceDTO> normalizeEvidenceMappings(
+        List<RequirementEvidenceDTO> mappings
+    ) {
+        if (mappings == null || mappings.isEmpty()) {
+            return List.of();
+        }
+        List<RequirementEvidenceDTO> normalized = new ArrayList<>();
+        for (RequirementEvidenceDTO mapping : mappings) {
+            if (mapping == null || mapping.requirement() == null) {
+                continue;
+            }
+            JdRequirementDTO requirement = mapping.requirement();
+            String requirementId = defaultText(requirement.id(), "REQ-" + (normalized.size() + 1));
+            JdRequirementDTO safeRequirement = new JdRequirementDTO(
+                truncate(requirementId.trim(), 40),
+                truncate(defaultText(requirement.category(), "OTHER"), 80),
+                truncate(defaultText(requirement.description(), "未命名岗位要求"), 300),
+                normalizeValue(requirement.importance(), IMPORTANCE_LEVELS, "MEDIUM"),
+                truncate(defaultText(requirement.sourceQuote(), "JD 未提供可引用原文"), 500)
+            );
+            List<ResumeEvidenceDTO> safeEvidence = normalizeResumeEvidence(mapping.resumeEvidence());
+            normalized.add(new RequirementEvidenceDTO(
+                safeRequirement,
+                safeEvidence,
+                normalizeValue(mapping.coverageType(), COVERAGE_TYPES, "CAPABILITY_GAP"),
+                clampScore(mapping.confidence()),
+                truncate(defaultText(mapping.reasoning(), "暂无判断说明"), 500),
+                truncate(defaultText(mapping.recommendedAction(), "补充与该要求相关的可验证证据"), 500)
+            ));
+            if (normalized.size() >= 12) {
+                break;
+            }
+        }
+        return normalized;
+    }
+
+    private List<ResumeEvidenceDTO> normalizeResumeEvidence(List<ResumeEvidenceDTO> evidenceItems) {
+        if (evidenceItems == null) {
+            return List.of();
+        }
+        return evidenceItems.stream()
+            .filter(item -> item != null && item.quote() != null && !item.quote().isBlank())
+            .map(item -> new ResumeEvidenceDTO(
+                truncate(defaultText(item.sourceType(), "OTHER"), 40),
+                truncate(defaultText(item.sourceLocation(), "简历未标注位置"), 120),
+                truncate(item.quote().trim(), 600),
+                normalizeValue(item.strength(), EVIDENCE_STRENGTHS, "WEAK")
+            ))
+            .limit(4)
+            .toList();
+    }
+
+    private List<RequirementEvidenceDTO> readEvidenceMappings(String json) {
+        if (json == null || json.isBlank()) {
+            return List.of();
+        }
+        try {
+            return objectMapper.readValue(json, new TypeReference<>() {
+            });
+        } catch (JacksonException e) {
+            log.warn("读取岗位证据矩阵失败: {}", e.getMessage());
+            return List.of();
+        }
     }
 
     private String writeList(List<String> items) {
@@ -274,6 +364,40 @@ public class JobMatchService {
             sb.append("- ").append(item).append('\n');
         }
         sb.append('\n');
+    }
+
+    private void appendEvidenceMatrix(
+        StringBuilder sb,
+        List<RequirementEvidenceDTO> mappings
+    ) {
+        if (mappings.isEmpty()) {
+            return;
+        }
+        sb.append("### JD 要求—简历证据矩阵\n");
+        for (RequirementEvidenceDTO mapping : mappings.stream().limit(10).toList()) {
+            JdRequirementDTO requirement = mapping.requirement();
+            sb.append("- [").append(requirement.id()).append("] ")
+                .append(requirement.description())
+                .append(" | 重要度=").append(requirement.importance())
+                .append(" | 覆盖=").append(mapping.coverageType())
+                .append(" | 置信度=").append(mapping.confidence()).append("\n");
+            sb.append("  - JD 原文：").append(requirement.sourceQuote()).append('\n');
+            for (ResumeEvidenceDTO evidence : mapping.resumeEvidence()) {
+                sb.append("  - 简历证据[").append(evidence.sourceLocation()).append("]：")
+                    .append(evidence.quote()).append('\n');
+            }
+            sb.append("  - 判断：").append(mapping.reasoning()).append('\n');
+            sb.append("  - 建议：").append(mapping.recommendedAction()).append('\n');
+        }
+        sb.append('\n');
+    }
+
+    private String normalizeValue(String value, Set<String> supported, String fallback) {
+        if (value == null) {
+            return fallback;
+        }
+        String normalized = value.trim().toUpperCase();
+        return supported.contains(normalized) ? normalized : fallback;
     }
 
     private int clampScore(Integer score) {

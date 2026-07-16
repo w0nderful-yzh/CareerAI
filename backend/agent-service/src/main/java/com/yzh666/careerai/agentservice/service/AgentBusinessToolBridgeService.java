@@ -3,7 +3,13 @@ package com.yzh666.careerai.agentservice.service;
 import com.yzh666.careerai.agentservice.client.AgentToolResponse;
 import com.yzh666.careerai.agentservice.client.CareerAiBusinessToolClient;
 import com.yzh666.careerai.common.agent.AgentInternalAccessService;
+import com.yzh666.careerai.common.agent.tool.AgentCreateInterviewSessionCommand;
+import com.yzh666.careerai.common.agent.tool.AgentInterviewSession;
 import com.yzh666.careerai.common.agent.tool.AgentJobMatchCommand;
+import com.yzh666.careerai.common.agent.tool.AgentInterviewTurnCommand;
+import com.yzh666.careerai.common.agent.tool.AgentInterviewTurnContext;
+import com.yzh666.careerai.common.agent.tool.AgentInterviewTurnResult;
+import com.yzh666.careerai.common.agent.tool.AgentInterviewPlanningContext;
 import com.yzh666.careerai.common.agent.tool.AgentJobMatchReport;
 import com.yzh666.careerai.common.agent.tool.AgentJobMatchTask;
 import com.yzh666.careerai.common.agent.tool.AgentJobSnapshot;
@@ -76,6 +82,53 @@ public class AgentBusinessToolBridgeService {
 
   public AgentResumeImprovementPlan getImprovementPlan(Long planId, AgentToolCallContext context) {
     return unwrap(client.getImprovementPlan(planId, token(), auth(context), run(context), step(context)));
+  }
+
+  public AgentInterviewTurnContext getInterviewTurnContext(
+      String sessionId,
+      AgentToolCallContext context
+  ) {
+    return unwrap(client.getInterviewTurnContext(
+        sessionId, token(), auth(context), run(context), step(context)));
+  }
+
+  public AgentInterviewPlanningContext getInterviewPlanningContext(
+      AgentToolCallContext context
+  ) {
+    return unwrap(client.getInterviewPlanningContext(
+        token(), auth(context), run(context), step(context)));
+  }
+
+  public AgentInterviewSession createInterviewSession(
+      AgentCreateInterviewSessionCommand command,
+      AgentToolCallContext context,
+      String idempotencyKey
+  ) {
+    return unwrap(client.createInterviewSession(
+        command,
+        token(),
+        auth(context),
+        run(context),
+        step(context),
+        idempotencyKey
+    ));
+  }
+
+  public AgentInterviewTurnResult applyInterviewTurn(
+      String sessionId,
+      AgentInterviewTurnCommand command,
+      AgentToolCallContext context,
+      String idempotencyKey
+  ) {
+    return unwrap(client.applyInterviewTurn(
+        sessionId,
+        command,
+        token(),
+        auth(context),
+        run(context),
+        step(context),
+        idempotencyKey
+    ));
   }
 
   private <T> T unwrap(AgentToolResponse<T> response) {

@@ -4,10 +4,12 @@ import com.yzh666.careerai.common.ai.LlmProviderRegistry;
 import com.yzh666.careerai.common.ai.PromptSanitizer;
 import com.yzh666.careerai.common.ai.PromptSecurityConstants;
 import com.yzh666.careerai.common.ai.StructuredOutputInvoker;
+import com.yzh666.careerai.common.agent.tool.AgentNextQuestionIntent;
 import com.yzh666.careerai.common.constant.CommonConstants.InterviewDefaults;
 import com.yzh666.careerai.common.exception.BusinessException;
 import com.yzh666.careerai.common.exception.ErrorCode;
 import com.yzh666.careerai.modules.interview.model.HistoricalQuestion;
+import com.yzh666.careerai.modules.interview.model.InterviewBlueprintDTO;
 import com.yzh666.careerai.modules.interview.model.InterviewQuestionDTO;
 import com.yzh666.careerai.modules.interview.skill.InterviewSkillService;
 import com.yzh666.careerai.modules.interview.skill.InterviewSkillService.CategoryDTO;
@@ -86,7 +88,7 @@ public class InterviewQuestionService {
     private record QuestionListDTO(List<QuestionDTO> questions) {}
 
     private record QuestionDTO(String question, String type, String category,
-                               String topicSummary, List<String> followUps) {}
+                               String topicSummary, String requirementId, List<String> followUps) {}
 
     public InterviewQuestionService(
             StructuredOutputInvoker structuredOutputInvoker,
@@ -126,7 +128,8 @@ public class InterviewQuestionService {
             List<HistoricalQuestion> historicalQuestions,
             List<CategoryDTO> customCategories,
             String jdText,
-            String jobMatchContext) {
+            String jobMatchContext,
+            InterviewBlueprintDTO blueprint) {
 
         SkillDTO skill = resolveSkill(skillId, customCategories, jdText);
         String difficultyDesc = resolveDifficulty(difficulty);
@@ -135,9 +138,17 @@ public class InterviewQuestionService {
 
         boolean hasResume = resumeText != null && !resumeText.isBlank();
         String historicalSection = buildHistoricalSection(historicalQuestions);
+        int effectiveFollowUpCount = blueprint == null
+            ? followUpCount : Math.min(followUpCount, blueprint.maxFollowUpsPerTopic());
+        String blueprintSection = buildBlueprintSection(blueprint);
         if (!hasResume) {
             return generateDirectionOnly(questionChatClient, skill, difficultyDesc, questionCount,
-                historicalSection, jobMatchContext);
+                historicalSection, jobMatchContext, blueprintSection, effectiveFollowUpCount);
+        }
+        if (questionCount == 1) {
+            return generateResumeQuestions(questionChatClient, resumeText, 1, skill,
+                difficultyDesc, historicalSection, jobMatchContext, blueprintSection,
+                effectiveFollowUpCount);
         }
 
         int resumeCount = Math.max(1, (int) Math.round(questionCount * RESUME_QUESTION_RATIO));
@@ -148,12 +159,13 @@ public class InterviewQuestionService {
 
         CompletableFuture<List<InterviewQuestionDTO>> resumeFuture = CompletableFuture.supplyAsync(
             () -> generateResumeQuestions(questionChatClient, resumeText, resumeCount, skill,
-                difficultyDesc, historicalSection, jobMatchContext),
+                difficultyDesc, historicalSection, jobMatchContext, blueprintSection,
+                effectiveFollowUpCount),
             questionExecutor);
 
         CompletableFuture<List<InterviewQuestionDTO>> directionFuture = CompletableFuture.supplyAsync(
             () -> generateDirectionOnly(questionChatClient, skill, difficultyDesc, directionCount,
-                historicalSection, jobMatchContext),
+                historicalSection, jobMatchContext, blueprintSection, effectiveFollowUpCount),
             questionExecutor);
 
         List<InterviewQuestionDTO> resumeQuestions;
@@ -164,7 +176,7 @@ public class InterviewQuestionService {
             log.error("简历题生成失败，降级为全方向题", e.getCause());
             directionFuture.cancel(true);
             return generateDirectionOnly(questionChatClient, skill, difficultyDesc, questionCount,
-                historicalSection, jobMatchContext);
+                historicalSection, jobMatchContext, blueprintSection, effectiveFollowUpCount);
         }
 
         try {
@@ -172,14 +184,14 @@ public class InterviewQuestionService {
         } catch (CompletionException e) {
             log.error("方向题生成失败，降级为全简历题", e.getCause());
             if (resumeQuestions.isEmpty()) {
-                return generateFallbackQuestions(skill, questionCount);
+                return generateFallbackQuestions(skill, questionCount, effectiveFollowUpCount);
             }
             return resumeQuestions;
         }
 
         if (resumeQuestions.isEmpty() && directionQuestions.isEmpty()) {
             log.warn("简历题和方向题均为空，回退到默认问题");
-            return generateFallbackQuestions(skill, questionCount);
+            return generateFallbackQuestions(skill, questionCount, effectiveFollowUpCount);
         }
 
         List<InterviewQuestionDTO> merged = mergeQuestionBatches(resumeQuestions, directionQuestions);
@@ -188,19 +200,121 @@ public class InterviewQuestionService {
         return merged;
     }
 
+    /**
+     * 根据 Agent 的受控意图生成唯一下一题。Python 负责决策“考什么”，
+     * Java 负责注入简历、JD、历史题目并生成最终可执行问题。
+     */
+    public InterviewQuestionDTO generateNextQuestion(
+            String llmProvider,
+            String skillId,
+            String resumeText,
+            List<CategoryDTO> customCategories,
+            String jdText,
+            String jobMatchContext,
+            InterviewBlueprintDTO blueprint,
+            AgentNextQuestionIntent intent,
+            InterviewQuestionDTO currentQuestion,
+            String currentAnswer,
+            List<InterviewQuestionDTO> askedQuestions) {
+        SkillDTO skill = resolveSkill(skillId, customCategories, jdText);
+        ChatClient questionChatClient = llmProviderRegistry.getPlainChatClient(llmProvider);
+        List<HistoricalQuestion> history = askedQuestions == null ? List.of() : askedQuestions.stream()
+            .filter(question -> !question.isFollowUp())
+            .map(question -> new HistoricalQuestion(
+                question.question(), question.type(), question.topicSummary()))
+            .toList();
+        String controlledContext = buildControlledIntentContext(
+            jobMatchContext, intent, currentQuestion, currentAnswer);
+        String difficultyDesc = resolveDifficulty(intent.difficulty());
+        int effectiveFollowUpCount = blueprint == null
+            ? followUpCount : Math.min(followUpCount, blueprint.maxFollowUpsPerTopic());
+        String historySection = buildHistoricalSection(history);
+        String blueprintSection = buildBlueprintSection(blueprint);
+
+        List<InterviewQuestionDTO> generated = resumeText != null && !resumeText.isBlank()
+            ? generateResumeQuestions(
+                questionChatClient,
+                resumeText,
+                1,
+                skill,
+                difficultyDesc,
+                historySection,
+                controlledContext,
+                blueprintSection,
+                effectiveFollowUpCount)
+            : generateDirectionOnly(
+                questionChatClient,
+                skill,
+                difficultyDesc,
+                1,
+                historySection,
+                controlledContext,
+                blueprintSection,
+                effectiveFollowUpCount);
+        InterviewQuestionDTO selected = generated.stream()
+            .filter(question -> question.isFollowUp() == intent.followUp())
+            .findFirst()
+            .orElseGet(() -> generated.stream().findFirst()
+                .orElseThrow(() -> new BusinessException(
+                    ErrorCode.INTERVIEW_QUESTION_GENERATION_FAILED,
+                    "增量生成下一题失败")));
+        int nextIndex = askedQuestions == null ? 0 : askedQuestions.size();
+        return InterviewQuestionDTO.create(
+            nextIndex,
+            selected.question(),
+            intent.questionType().toUpperCase(),
+            intent.topic(),
+            intent.topic(),
+            intent.followUp(),
+            intent.followUp() ? intent.parentQuestionIndex() : null,
+            intent.requirementId());
+    }
+
+    private String buildControlledIntentContext(
+            String jobMatchContext,
+            AgentNextQuestionIntent intent,
+            InterviewQuestionDTO currentQuestion,
+            String currentAnswer) {
+        String base = jobMatchContext == null ? "" : jobMatchContext;
+        return base + """
+
+            # 本轮增量出题意图
+            - 题型：%s
+            - 主题：%s
+            - 关联要求：%s
+            - 难度：%s
+            - 是否追问：%s
+            - 考察目标：%s
+            - 当前问题：%s
+            - 候选人回答：%s
+
+            必须严格围绕本轮意图生成一道题，不要重复已考内容。
+            """.formatted(
+                intent.questionType(),
+                intent.topic(),
+                displayOrNone(intent.requirementId()),
+                intent.difficulty(),
+                intent.followUp() ? "是" : "否",
+                intent.objective(),
+                currentQuestion == null ? "无" : currentQuestion.question(),
+                displayOrNone(currentAnswer));
+    }
+
     private List<InterviewQuestionDTO> generateResumeQuestions(
             ChatClient questionClient, String resumeText, int questionCount,
-            SkillDTO skill, String difficultyDesc, String historicalSection, String jobMatchContext) {
+            SkillDTO skill, String difficultyDesc, String historicalSection, String jobMatchContext,
+            String blueprintSection, int effectiveFollowUpCount) {
         try {
             Map<String, Object> variables = new HashMap<>();
             variables.put("questionCount", questionCount);
-            variables.put("followUpCount", followUpCount);
+            variables.put("followUpCount", effectiveFollowUpCount);
             variables.put("skillName", skill.name());
             variables.put("skillDescription", skill.description() != null ? skill.description() : "");
             variables.put("difficultyDescription", difficultyDesc);
             variables.put("resumeText", resumeText);
             variables.put("historicalSection", historicalSection);
             variables.put("jobMatchSection", buildJobMatchSection(jobMatchContext));
+            variables.put("blueprintSection", blueprintSection);
 
             String systemPrompt = resumeSystemPromptTemplate.render()
                 + buildSkillPersonaSection(skill)
@@ -212,7 +326,7 @@ public class InterviewQuestionService {
                 ErrorCode.INTERVIEW_QUESTION_GENERATION_FAILED,
                 "简历题生成失败：", "简历题", log);
 
-            List<InterviewQuestionDTO> questions = convertToQuestions(dto);
+            List<InterviewQuestionDTO> questions = convertToQuestions(dto, effectiveFollowUpCount);
             questions = capToMainCount(questions, questionCount);
             log.info("简历题生成完成: 请求={}, 实际主问题={}",
                 questionCount, questions.stream().filter(q -> !q.isFollowUp()).count());
@@ -227,7 +341,8 @@ public class InterviewQuestionService {
 
     private List<InterviewQuestionDTO> generateDirectionOnly(
             ChatClient questionClient, SkillDTO skill, String difficultyDesc,
-            int questionCount, String historicalSection, String jobMatchContext) {
+            int questionCount, String historicalSection, String jobMatchContext,
+            String blueprintSection, int effectiveFollowUpCount) {
         Map<String, Integer> allocation = skillService.calculateAllocation(skill.categories(), questionCount);
         String allocationTable = skillService.buildAllocationDescription(allocation, skill.categories());
 
@@ -237,7 +352,7 @@ public class InterviewQuestionService {
         try {
             Map<String, Object> variables = new HashMap<>();
             variables.put("questionCount", questionCount);
-            variables.put("followUpCount", followUpCount);
+            variables.put("followUpCount", effectiveFollowUpCount);
             variables.put("difficultyDescription", difficultyDesc);
             variables.put("skillName", skill.name());
             variables.put("skillDescription", skill.description() != null ? skill.description() : "");
@@ -246,6 +361,7 @@ public class InterviewQuestionService {
             variables.put("referenceSection", skillService.buildReferenceSection(skill, allocation));
             variables.put("jdSection", buildJdSection(skill.sourceJd()));
             variables.put("jobMatchSection", buildJobMatchSection(jobMatchContext));
+            variables.put("blueprintSection", blueprintSection);
 
             String systemPrompt = skillSystemPromptTemplate.render()
                 + buildSkillPersonaSection(skill)
@@ -258,10 +374,10 @@ public class InterviewQuestionService {
                 ErrorCode.INTERVIEW_QUESTION_GENERATION_FAILED,
                 "方向题生成失败：", "方向题", log);
 
-            List<InterviewQuestionDTO> questions = convertToQuestions(dto);
+            List<InterviewQuestionDTO> questions = convertToQuestions(dto, effectiveFollowUpCount);
             if (questions.stream().filter(q -> !q.isFollowUp()).count() == 0) {
                 log.warn("方向题返回空题单，回退到默认问题");
-                return generateFallbackQuestions(skill, questionCount);
+                return generateFallbackQuestions(skill, questionCount, effectiveFollowUpCount);
             }
             questions = capToMainCount(questions, questionCount);
             log.info("方向题生成完成: 请求={}, 实际主问题={}",
@@ -271,7 +387,7 @@ public class InterviewQuestionService {
             throw e;
         } catch (Exception e) {
             log.error("方向题生成失败，回退到默认问题: {}", e.getMessage(), e);
-            return generateFallbackQuestions(skill, questionCount);
+            return generateFallbackQuestions(skill, questionCount, effectiveFollowUpCount);
         }
     }
 
@@ -291,7 +407,7 @@ public class InterviewQuestionService {
                 ? q.parentQuestionIndex() + offset : null;
             merged.add(InterviewQuestionDTO.create(
                 newIndex, q.question(), q.type(), q.category(),
-                q.topicSummary(), q.isFollowUp(), newParent));
+                q.topicSummary(), q.isFollowUp(), newParent, q.requirementId()));
         }
         return merged;
     }
@@ -310,7 +426,7 @@ public class InterviewQuestionService {
             DIFFICULTY_DESCRIPTIONS.get(InterviewDefaults.DIFFICULTY));
     }
 
-    private List<InterviewQuestionDTO> convertToQuestions(QuestionListDTO dto) {
+    private List<InterviewQuestionDTO> convertToQuestions(QuestionListDTO dto, int effectiveFollowUpCount) {
         List<InterviewQuestionDTO> questions = new ArrayList<>();
         int index = 0;
 
@@ -324,18 +440,29 @@ public class InterviewQuestionService {
             }
             String type = (q.type() != null && !q.type().isBlank()) ? q.type().toUpperCase() : DEFAULT_QUESTION_TYPE;
             int mainQuestionIndex = index;
-            questions.add(InterviewQuestionDTO.create(index++, q.question(), type, q.category(), q.topicSummary(), false, null));
+            questions.add(InterviewQuestionDTO.create(
+                index++, q.question(), type, q.category(), q.topicSummary(), false, null,
+                normalizeRequirementId(q.requirementId())));
 
-            List<String> followUps = sanitizeFollowUps(q.followUps());
+            List<String> followUps = sanitizeFollowUps(q.followUps(), effectiveFollowUpCount);
             for (int i = 0; i < followUps.size(); i++) {
                 questions.add(InterviewQuestionDTO.create(
                     index++, followUps.get(i), type,
-                    buildFollowUpCategory(q.category(), i + 1), null, true, mainQuestionIndex
+                    buildFollowUpCategory(q.category(), i + 1), null, true, mainQuestionIndex,
+                    normalizeRequirementId(q.requirementId())
                 ));
             }
         }
 
         return questions;
+    }
+
+    private String normalizeRequirementId(String requirementId) {
+        if (requirementId == null || requirementId.isBlank()) {
+            return null;
+        }
+        String normalized = requirementId.trim().toUpperCase();
+        return normalized.matches("REQ-[A-Z0-9_-]{1,24}") ? normalized : null;
     }
 
     /**
@@ -367,7 +494,8 @@ public class InterviewQuestionService {
         return capped;
     }
 
-    private List<InterviewQuestionDTO> generateFallbackQuestions(SkillDTO skill, int count) {
+    private List<InterviewQuestionDTO> generateFallbackQuestions(
+            SkillDTO skill, int count, int effectiveFollowUpCount) {
         List<SkillCategoryDTO> categories = skill != null ? skill.categories() : List.of();
         List<InterviewQuestionDTO> questions = new ArrayList<>();
         int index = 0;
@@ -379,7 +507,7 @@ public class InterviewQuestionService {
                 String question = "请谈谈你在\"" + cat.label() + "\"方向的技术理解和实践经验。";
                 questions.add(InterviewQuestionDTO.create(index++, question, cat.key(), cat.label(), null, false, null));
                 int mainIndex = index - 1;
-                for (int j = 0; j < followUpCount; j++) {
+                for (int j = 0; j < effectiveFollowUpCount; j++) {
                     questions.add(InterviewQuestionDTO.create(
                         index++, buildDefaultFollowUp(question, j + 1),
                         cat.key(), buildFollowUpCategory(cat.label(), j + 1), null, true, mainIndex
@@ -394,7 +522,7 @@ public class InterviewQuestionService {
             String[] q = GENERIC_FALLBACK_QUESTIONS[i];
             questions.add(InterviewQuestionDTO.create(index++, q[0], q[1], q[2], null, false, null));
             int mainIndex = index - 1;
-            for (int j = 0; j < followUpCount; j++) {
+            for (int j = 0; j < effectiveFollowUpCount; j++) {
                 questions.add(InterviewQuestionDTO.create(
                     index++, buildDefaultFollowUp(q[0], j + 1),
                     q[1], buildFollowUpCategory(q[2], j + 1), null, true, mainIndex
@@ -448,6 +576,43 @@ public class InterviewQuestionService {
             promptSanitizer.wrapWithDelimiters("job_match_report", promptSanitizer.sanitize(jobMatchContext));
     }
 
+    private String buildBlueprintSection(InterviewBlueprintDTO blueprint) {
+        if (blueprint == null) {
+            return "暂无专项蓝图，请按默认面试方向均衡出题。";
+        }
+        return """
+            ## Agent 面试生成蓝图
+            - 训练模式：%s
+            - 本轮目标：%s
+            - 重点岗位要求：%s
+            - 强化主题：%s
+            - 题型组合：%s
+            - 回避主题：%s
+            - 目标难度：%s
+            - 单主题最多追问：%d
+            - 规划理由：%s
+
+            蓝图描述的是本轮覆盖重点，不得据此编造简历或 JD 中不存在的经历。
+            """.formatted(
+                blueprint.mode(),
+                displayOrNone(blueprint.objective()),
+                displayList(blueprint.targetRequirementIds()),
+                displayList(blueprint.focusTopics()),
+                displayList(blueprint.questionTypes()),
+                displayList(blueprint.avoidTopics()),
+                blueprint.difficulty(),
+                blueprint.maxFollowUpsPerTopic(),
+                displayOrNone(blueprint.rationale()));
+    }
+
+    private String displayList(List<String> values) {
+        return values == null || values.isEmpty() ? "无" : String.join("、", values);
+    }
+
+    private String displayOrNone(String value) {
+        return value == null || value.isBlank() ? "无" : value;
+    }
+
     private String buildSkillPersonaSection(SkillDTO skill) {
         if (skill == null || skill.persona() == null || skill.persona().isBlank()) {
             return "";
@@ -457,14 +622,14 @@ public class InterviewQuestionService {
             + promptSanitizer.wrapWithDelimiters("skill_persona", skill.persona());
     }
 
-    private List<String> sanitizeFollowUps(List<String> followUps) {
-        if (followUpCount == 0 || followUps == null || followUps.isEmpty()) {
+    private List<String> sanitizeFollowUps(List<String> followUps, int effectiveFollowUpCount) {
+        if (effectiveFollowUpCount == 0 || followUps == null || followUps.isEmpty()) {
             return List.of();
         }
         return followUps.stream()
             .filter(item -> item != null && !item.isBlank())
             .map(String::trim)
-            .limit(followUpCount)
+            .limit(effectiveFollowUpCount)
             .collect(Collectors.toList());
     }
 

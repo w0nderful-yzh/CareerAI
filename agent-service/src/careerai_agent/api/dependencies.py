@@ -4,11 +4,21 @@ import httpx
 from fastapi import Header, HTTPException, Request, status
 
 from careerai_agent.clients.careerai import CareerAiApiError, CareerAiClient
+from careerai_agent.graph.interview import AdaptiveInterviewService
+from careerai_agent.graph.interview_creation import InterviewCreationService
 from careerai_agent.services.runs import RunService
 
 
 def get_run_service(request: Request) -> RunService:
     return cast(RunService, request.app.state.run_service)
+
+
+def get_adaptive_interview_service(request: Request) -> AdaptiveInterviewService:
+    return cast(AdaptiveInterviewService, request.app.state.adaptive_interview_service)
+
+
+def get_interview_creation_service(request: Request) -> InterviewCreationService:
+    return cast(InterviewCreationService, request.app.state.interview_creation_service)
 
 
 def get_careerai_client(request: Request) -> CareerAiClient:

@@ -15,7 +15,13 @@ public record InterviewReportDTO(
     List<String> strengths,                    // 优势
     List<String> improvements,                 // 改进建议
     JobEvaluation jobEvaluation,               // 岗位化评价
-    List<ReferenceAnswer> referenceAnswers     // 参考答案
+    List<ReferenceAnswer> referenceAnswers,    // 参考答案
+    String endReason,
+    String completionType,
+    List<String> coveredTargets,
+    List<String> unverifiedTargets,
+    List<DimensionScore> dimensionScores,
+    List<EvidenceConclusion> evidenceConclusions
 ) {
     /**
      * 类别得分
@@ -59,5 +65,24 @@ public record InterviewReportDTO(
         List<String> exposedGaps,
         List<String> resumeRewriteSuggestions,
         List<String> nextActions
+    ) {}
+
+    /** 多个有效轮次在同一能力维度上的平均观察。 */
+    public record DimensionScore(
+        String dimension,
+        int score,
+        int evidenceCount
+    ) {}
+
+    /** 可追溯到具体问题和回答原文片段的评价结论。 */
+    public record EvidenceConclusion(
+        int questionIndex,
+        String question,
+        String dimension,
+        int score,
+        String feedback,
+        List<String> evidenceSnippets,
+        List<String> missingPoints,
+        int confidence
     ) {}
 }

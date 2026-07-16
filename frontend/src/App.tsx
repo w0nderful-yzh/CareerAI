@@ -4,6 +4,7 @@ import { useEffect, useState, Suspense, lazy } from 'react';
 import { historyApi, type InterviewDetail } from './api/history';
 import type { Difficulty } from './components/UnifiedInterviewModal';
 import type { CategoryDTO } from './api/skill';
+import type { InterviewTrainingMode } from './types/interview';
 import { Loader2 } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 
@@ -105,6 +106,8 @@ interface InterviewEntryState {
     jdText?: string;
     jobId?: number;
     matchReportId?: number;
+    trainingMode?: InterviewTrainingMode;
+    userFocus?: string;
   };
 }
 
@@ -185,8 +188,8 @@ function App() {
           <Route path="/login" element={<AuthPage />} />
 
           <Route path="/" element={<ProtectedLayout />}>
-            {/* 默认重定向到简历管理页面 */}
-            <Route index element={<Navigate to="/history" replace />} />
+            {/* 产品主线从目标岗位开始，Agent 能力嵌入岗位和面试场景。 */}
+            <Route index element={<Navigate to="/jobs" replace />} />
 
             {/* 上传页面 */}
             <Route path="upload" element={<UploadPageWrapper />} />

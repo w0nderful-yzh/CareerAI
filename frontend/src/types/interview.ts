@@ -9,6 +9,30 @@ export interface InterviewSession {
   currentQuestionIndex: number;
   questions: InterviewQuestion[];
   status: 'CREATED' | 'IN_PROGRESS' | 'COMPLETED' | 'EVALUATED';
+  blueprint?: InterviewBlueprint | null;
+  endReason?: string | null;
+  completionType?: 'COMPLETE' | 'PARTIAL' | null;
+  coveredTargets?: string[];
+  unverifiedTargets?: string[];
+}
+
+export type InterviewTrainingMode =
+  | 'GENERAL'
+  | 'JOB_TARGETED'
+  | 'FOCUS_DRILL'
+  | 'RESUME_DEFENSE';
+
+export interface InterviewBlueprint {
+  mode: InterviewTrainingMode;
+  objective: string;
+  targetRequirementIds: string[];
+  focusTopics: string[];
+  questionTypes: Array<'CONCEPT' | 'PROJECT_EVIDENCE' | 'SCENARIO_DESIGN' | 'TROUBLESHOOTING'>;
+  avoidTopics: string[];
+  difficulty: string;
+  questionCount: number;
+  maxFollowUpsPerTopic: number;
+  rationale: string;
 }
 
 export interface InterviewQuestion {
@@ -19,6 +43,49 @@ export interface InterviewQuestion {
   userAnswer: string | null;
   score: number | null;
   feedback: string | null;
+  topicSummary?: string | null;
+  isFollowUp?: boolean;
+  followUp?: boolean;
+  parentQuestionIndex?: number | null;
+  requirementId?: string | null;
+}
+
+export type InterviewAgentAction =
+  | 'FOLLOW_UP'
+  | 'SWITCH_TOPIC'
+  | 'ADJUST_DIFFICULTY'
+  | 'END_INTERVIEW';
+
+export type InterviewIntent =
+  | 'AUTO'
+  | 'ANSWER'
+  | 'END'
+  | 'SKIP'
+  | 'HINT'
+  | 'EXPLAIN'
+  | 'CONTINUE';
+
+export interface InterviewAgentDecision {
+  questionIndex: number;
+  action: InterviewAgentAction;
+  rationale: string;
+  answerScore: number;
+  feedback: string;
+  difficultyAdjustment: 'KEEP' | 'HARDER' | 'EASIER';
+  targetQuestionIndex: number | null;
+  targetRequirementId: string | null;
+  createdAt: string;
+}
+
+export interface AdaptiveInterviewTurnResult {
+  sessionId: string;
+  completed: boolean;
+  nextQuestion: InterviewQuestion | null;
+  decision: InterviewAgentDecision | null;
+  answeredCount: number;
+  totalQuestions: number;
+  intent: Exclude<InterviewIntent, 'AUTO'>;
+  assistantMessage?: string | null;
 }
 
 export interface CreateInterviewRequest {
@@ -33,68 +100,6 @@ export interface CreateInterviewRequest {
   jdText?: string;
   jobId?: number;
   matchReportId?: number;
-}
-
-export interface SubmitAnswerRequest {
-  sessionId: string;
-  questionIndex: number;
-  answer: string;
-}
-
-export interface SubmitAnswerResponse {
-  hasNextQuestion: boolean;
-  nextQuestion: InterviewQuestion | null;
-  currentIndex: number;
-  totalQuestions: number;
-}
-
-export interface CurrentQuestionResponse {
-  completed: boolean;
-  question?: InterviewQuestion;
-  message?: string;
-}
-
-export interface InterviewReport {
-  sessionId: string;
-  totalQuestions: number;
-  overallScore: number;
-  categoryScores: CategoryScore[];
-  questionDetails: QuestionEvaluation[];
-  overallFeedback: string;
-  strengths: string[];
-  improvements: string[];
-  jobEvaluation?: JobEvaluation | null;
-  referenceAnswers: ReferenceAnswer[];
-}
-
-export interface JobEvaluation {
-  targetJobTitle: string;
-  conclusion: string;
-  jdCoverageScore: number;
-  jdCoverage: string[];
-  exposedGaps: string[];
-  resumeRewriteSuggestions: string[];
-  nextActions: string[];
-}
-
-export interface CategoryScore {
-  category: string;
-  score: number;
-  questionCount: number;
-}
-
-export interface QuestionEvaluation {
-  questionIndex: number;
-  question: string;
-  category: string;
-  userAnswer: string;
-  score: number;
-  feedback: string;
-}
-
-export interface ReferenceAnswer {
-  questionIndex: number;
-  question: string;
-  referenceAnswer: string;
-  keyPoints: string[];
+  trainingMode?: InterviewTrainingMode;
+  userFocus?: string;
 }

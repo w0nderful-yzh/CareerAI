@@ -9,10 +9,13 @@ import com.yzh666.careerai.common.exception.ErrorCode;
 import com.yzh666.careerai.modules.interview.model.InterviewQuestionDTO;
 import com.yzh666.careerai.modules.interview.model.InterviewReportDTO;
 import com.yzh666.careerai.modules.interview.model.InterviewReportDTO.CategoryScore;
+import com.yzh666.careerai.modules.interview.model.InterviewReportDTO.DimensionScore;
+import com.yzh666.careerai.modules.interview.model.InterviewReportDTO.EvidenceConclusion;
 import com.yzh666.careerai.modules.interview.model.InterviewReportDTO.JobEvaluation;
 import com.yzh666.careerai.modules.interview.model.InterviewReportDTO.QuestionEvaluation;
 import com.yzh666.careerai.modules.interview.model.InterviewReportDTO.ReferenceAnswer;
 import com.yzh666.careerai.modules.interview.model.InterviewSessionEntity;
+import com.yzh666.careerai.modules.interview.model.TurnEvaluationEvidenceDTO;
 import com.yzh666.careerai.modules.interview.repository.InterviewSessionRepository;
 import com.yzh666.careerai.modules.interview.skill.InterviewSkillService;
 import com.yzh666.careerai.modules.job.model.JobEntity;
@@ -22,6 +25,7 @@ import com.yzh666.careerai.modules.jobmatch.repository.JobMatchReportRepository;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
+import java.util.ArrayList;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
@@ -119,6 +123,8 @@ public class AnswerEvaluationService {
     }
 
     private InterviewReportDTO toInterviewReportDTO(EvaluationReport report, JobEvaluation jobEvaluation) {
+        var completion = persistenceService.getCompletionSnapshot(report.sessionId());
+        var turnEvaluations = persistenceService.getTurnEvaluations(report.sessionId());
         return new InterviewReportDTO(
             report.sessionId(),
             report.totalQuestions(),
@@ -137,8 +143,87 @@ public class AnswerEvaluationService {
             report.referenceAnswers().stream()
                 .map(ra -> new ReferenceAnswer(ra.questionIndex(), ra.question(),
                     ra.referenceAnswer(), ra.keyPoints()))
-                .toList()
+                .toList(),
+            completion.endReason(),
+            completion.completionType(),
+            completion.coveredTargets(),
+            completion.unverifiedTargets(),
+            buildDimensionScores(turnEvaluations),
+            buildEvidenceConclusions(turnEvaluations)
         );
+    }
+
+    private List<DimensionScore> buildDimensionScores(
+            List<TurnEvaluationEvidenceDTO> turns) {
+        Map<String, List<Integer>> values = new java.util.LinkedHashMap<>();
+        for (var turn : turns) {
+            var evaluation = turn.evaluation();
+            addDimension(values, "TECHNICAL_CORRECTNESS", evaluation.technicalCorrectness());
+            addDimension(values, "TECHNICAL_DEPTH", evaluation.technicalDepth());
+            addDimension(values, "COMPLETENESS", evaluation.completeness());
+            addDimension(values, "SCENARIO_REASONING", evaluation.scenarioReasoning());
+            addDimension(values, "PROJECT_UNDERSTANDING", evaluation.projectUnderstanding());
+            addDimension(values, "TROUBLESHOOTING", evaluation.troubleshooting());
+            addDimension(values, "EXPRESSION_STRUCTURE", evaluation.expressionStructure());
+            addDimension(values, "CLARITY", evaluation.clarity());
+            addDimension(values, "CREDIBILITY", evaluation.credibility());
+            addDimension(values, "JOB_RELEVANCE", evaluation.jobRelevance());
+        }
+        return values.entrySet().stream()
+            .map(entry -> new DimensionScore(
+                entry.getKey(),
+                (int) Math.round(entry.getValue().stream()
+                    .mapToInt(Integer::intValue)
+                    .average()
+                    .orElse(0)),
+                entry.getValue().size()))
+            .toList();
+    }
+
+    private List<EvidenceConclusion> buildEvidenceConclusions(
+            List<TurnEvaluationEvidenceDTO> turns) {
+        List<EvidenceConclusion> result = new ArrayList<>();
+        for (var turn : turns) {
+            var evaluation = turn.evaluation();
+            addEvidence(result, turn, "TECHNICAL_CORRECTNESS", evaluation.technicalCorrectness());
+            addEvidence(result, turn, "TECHNICAL_DEPTH", evaluation.technicalDepth());
+            addEvidence(result, turn, "COMPLETENESS", evaluation.completeness());
+            addEvidence(result, turn, "SCENARIO_REASONING", evaluation.scenarioReasoning());
+            addEvidence(result, turn, "PROJECT_UNDERSTANDING", evaluation.projectUnderstanding());
+            addEvidence(result, turn, "TROUBLESHOOTING", evaluation.troubleshooting());
+            addEvidence(result, turn, "EXPRESSION_STRUCTURE", evaluation.expressionStructure());
+            addEvidence(result, turn, "CLARITY", evaluation.clarity());
+            addEvidence(result, turn, "CREDIBILITY", evaluation.credibility());
+            addEvidence(result, turn, "JOB_RELEVANCE", evaluation.jobRelevance());
+        }
+        return result;
+    }
+
+    private void addDimension(Map<String, List<Integer>> values, String dimension, Integer score) {
+        if (score != null) {
+            values.computeIfAbsent(dimension, ignored -> new ArrayList<>()).add(score);
+        }
+    }
+
+    private void addEvidence(
+            List<EvidenceConclusion> result,
+            TurnEvaluationEvidenceDTO turn,
+            String dimension,
+            Integer score) {
+        if (score == null) {
+            return;
+        }
+        var evaluation = turn.evaluation();
+        result.add(new EvidenceConclusion(
+            turn.questionIndex(),
+            turn.question(),
+            dimension,
+            score,
+            turn.feedback(),
+            evaluation.evidenceSnippets(),
+            evaluation.missingPoints(),
+            evaluation.confidence()
+        ));
     }
 
     private JobEvaluation buildJobEvaluation(

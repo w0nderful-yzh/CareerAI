@@ -18,6 +18,8 @@
 
 {matchReport}
 
+{agentDecision}
+
 {latestInterviewReview}
 
 请返回严格 JSON，字段含义如下：
@@ -28,3 +30,12 @@
 - projectUpgradeTasks：项目补强任务，3-5 条。
 - interviewPracticeTasks：面试练习任务，3-5 条。
 - learningTasks：学习/刷题/文档补齐任务，3-5 条。
+- preparationTasks：结构化岗位准备任务，5-10 条。每项包含：
+  - id：TASK-1 等稳定标识。
+  - category：RESUME、PROJECT、LEARNING、INTERVIEW 之一。
+  - title：具体可执行任务。
+  - priority：P0、P1、P2 之一。
+  - suggestedDays：建议完成天数，1-30。
+  - verificationMethod：完成后如何验证，不接受“学习一下”这类模糊描述。
+  - status：统一返回 PENDING。
+  - relatedRequirementIds：关联证据矩阵中的 REQ id 数组。

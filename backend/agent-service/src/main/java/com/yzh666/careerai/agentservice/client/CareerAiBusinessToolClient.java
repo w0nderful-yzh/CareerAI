@@ -1,7 +1,13 @@
 package com.yzh666.careerai.agentservice.client;
 
 import com.yzh666.careerai.common.agent.AgentInternalAccessService;
+import com.yzh666.careerai.common.agent.tool.AgentCreateInterviewSessionCommand;
+import com.yzh666.careerai.common.agent.tool.AgentInterviewSession;
 import com.yzh666.careerai.common.agent.tool.AgentJobMatchCommand;
+import com.yzh666.careerai.common.agent.tool.AgentInterviewTurnCommand;
+import com.yzh666.careerai.common.agent.tool.AgentInterviewTurnContext;
+import com.yzh666.careerai.common.agent.tool.AgentInterviewTurnResult;
+import com.yzh666.careerai.common.agent.tool.AgentInterviewPlanningContext;
 import com.yzh666.careerai.common.agent.tool.AgentJobMatchReport;
 import com.yzh666.careerai.common.agent.tool.AgentJobMatchTask;
 import com.yzh666.careerai.common.agent.tool.AgentJobSnapshot;
@@ -94,5 +100,43 @@ public interface CareerAiBusinessToolClient {
       @RequestHeader(AgentInternalAccessService.AUTHORIZATION_HEADER) String authorization,
       @RequestHeader(AgentInternalAccessService.RUN_ID_HEADER) String runId,
       @RequestHeader(AgentInternalAccessService.STEP_ID_HEADER) String stepId
+  );
+
+  @GetMapping("/internal/agent/tools/interview-sessions/{sessionId}/turn-context")
+  AgentToolResponse<AgentInterviewTurnContext> getInterviewTurnContext(
+      @PathVariable String sessionId,
+      @RequestHeader(AgentInternalAccessService.TOKEN_HEADER) String serviceToken,
+      @RequestHeader(AgentInternalAccessService.AUTHORIZATION_HEADER) String authorization,
+      @RequestHeader(AgentInternalAccessService.RUN_ID_HEADER) String runId,
+      @RequestHeader(AgentInternalAccessService.STEP_ID_HEADER) String stepId
+  );
+
+  @GetMapping("/internal/agent/tools/interview-planning-context")
+  AgentToolResponse<AgentInterviewPlanningContext> getInterviewPlanningContext(
+      @RequestHeader(AgentInternalAccessService.TOKEN_HEADER) String serviceToken,
+      @RequestHeader(AgentInternalAccessService.AUTHORIZATION_HEADER) String authorization,
+      @RequestHeader(AgentInternalAccessService.RUN_ID_HEADER) String runId,
+      @RequestHeader(AgentInternalAccessService.STEP_ID_HEADER) String stepId
+  );
+
+  @PostMapping("/internal/agent/tools/interview-sessions")
+  AgentToolResponse<AgentInterviewSession> createInterviewSession(
+      @RequestBody AgentCreateInterviewSessionCommand command,
+      @RequestHeader(AgentInternalAccessService.TOKEN_HEADER) String serviceToken,
+      @RequestHeader(AgentInternalAccessService.AUTHORIZATION_HEADER) String authorization,
+      @RequestHeader(AgentInternalAccessService.RUN_ID_HEADER) String runId,
+      @RequestHeader(AgentInternalAccessService.STEP_ID_HEADER) String stepId,
+      @RequestHeader(AgentInternalAccessService.IDEMPOTENCY_KEY_HEADER) String idempotencyKey
+  );
+
+  @PostMapping("/internal/agent/tools/interview-sessions/{sessionId}/turns")
+  AgentToolResponse<AgentInterviewTurnResult> applyInterviewTurn(
+      @PathVariable String sessionId,
+      @RequestBody AgentInterviewTurnCommand command,
+      @RequestHeader(AgentInternalAccessService.TOKEN_HEADER) String serviceToken,
+      @RequestHeader(AgentInternalAccessService.AUTHORIZATION_HEADER) String authorization,
+      @RequestHeader(AgentInternalAccessService.RUN_ID_HEADER) String runId,
+      @RequestHeader(AgentInternalAccessService.STEP_ID_HEADER) String stepId,
+      @RequestHeader(AgentInternalAccessService.IDEMPOTENCY_KEY_HEADER) String idempotencyKey
   );
 }

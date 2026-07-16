@@ -5,9 +5,17 @@ from typing import Any, Protocol
 import httpx
 
 from careerai_agent.tools.models import (
+    InterviewBlueprint,
+    InterviewCategory,
+    InterviewPlanningContext,
+    InterviewSession,
+    InterviewTurnContext,
+    InterviewTurnEvaluation,
+    InterviewTurnResult,
     JobMatchReport,
     JobMatchTask,
     JobSnapshot,
+    NextQuestionIntent,
     ResumeDetail,
     ResumeImprovementPlan,
     ResumeSummary,
@@ -63,6 +71,11 @@ class BusinessToolClient(Protocol):
     async def create_improvement_plan(
         self,
         match_report_id: int,
+        strategy: str,
+        rationale: str,
+        prioritized_gaps: list[str],
+        supporting_evidence: list[str],
+        interview_focus: list[str],
         context: ToolCallContext,
         idempotency_key: str,
     ) -> ResumeImprovementPlan: ...
@@ -72,6 +85,54 @@ class BusinessToolClient(Protocol):
         plan_id: int,
         context: ToolCallContext,
     ) -> ResumeImprovementPlan: ...
+
+    async def get_interview_turn_context(
+        self,
+        session_id: str,
+        context: ToolCallContext,
+    ) -> InterviewTurnContext: ...
+
+    async def get_interview_planning_context(
+        self,
+        context: ToolCallContext,
+    ) -> InterviewPlanningContext: ...
+
+    async def create_interview_session(
+        self,
+        *,
+        resume_text: str | None,
+        question_count: int,
+        resume_id: int | None,
+        force_create: bool,
+        llm_provider: str | None,
+        skill_id: str,
+        difficulty: str,
+        custom_categories: list[InterviewCategory],
+        jd_text: str | None,
+        job_id: int | None,
+        match_report_id: int | None,
+        blueprint: InterviewBlueprint,
+        context: ToolCallContext,
+        idempotency_key: str,
+    ) -> InterviewSession: ...
+
+    async def apply_interview_turn(
+        self,
+        session_id: str,
+        question_index: int,
+        answer: str | None,
+        action: str,
+        rationale: str,
+        answer_score: int,
+        feedback: str,
+        difficulty_adjustment: str,
+        next_question_intent: NextQuestionIntent | None,
+        evaluation: InterviewTurnEvaluation | None,
+        end_reason: str | None,
+        intent: str,
+        context: ToolCallContext,
+        idempotency_key: str,
+    ) -> InterviewTurnResult: ...
 
 
 class AgentBusinessToolClient:
@@ -155,6 +216,11 @@ class AgentBusinessToolClient:
     async def create_improvement_plan(
         self,
         match_report_id: int,
+        strategy: str,
+        rationale: str,
+        prioritized_gaps: list[str],
+        supporting_evidence: list[str],
+        interview_focus: list[str],
         context: ToolCallContext,
         idempotency_key: str,
     ) -> ResumeImprovementPlan:
@@ -162,7 +228,14 @@ class AgentBusinessToolClient:
             "POST",
             "/internal/agent/tools/resume-improvement-plans",
             context,
-            json={"matchReportId": match_report_id},
+            json={
+                "matchReportId": match_report_id,
+                "strategy": strategy,
+                "rationale": rationale,
+                "prioritizedGaps": prioritized_gaps,
+                "supportingEvidence": supporting_evidence,
+                "interviewFocus": interview_focus,
+            },
             idempotency_key=idempotency_key,
         )
         return ResumeImprovementPlan.model_validate(data)
@@ -178,6 +251,111 @@ class AgentBusinessToolClient:
             context,
         )
         return ResumeImprovementPlan.model_validate(data)
+
+    async def get_interview_turn_context(
+        self,
+        session_id: str,
+        context: ToolCallContext,
+    ) -> InterviewTurnContext:
+        data = await self._request(
+            "GET",
+            f"/internal/agent/tools/interview-sessions/{session_id}/turn-context",
+            context,
+        )
+        return InterviewTurnContext.model_validate(data)
+
+    async def get_interview_planning_context(
+        self,
+        context: ToolCallContext,
+    ) -> InterviewPlanningContext:
+        data = await self._request(
+            "GET",
+            "/internal/agent/tools/interview-planning-context",
+            context,
+        )
+        return InterviewPlanningContext.model_validate(data)
+
+    async def create_interview_session(
+        self,
+        *,
+        resume_text: str | None,
+        question_count: int,
+        resume_id: int | None,
+        force_create: bool,
+        llm_provider: str | None,
+        skill_id: str,
+        difficulty: str,
+        custom_categories: list[InterviewCategory],
+        jd_text: str | None,
+        job_id: int | None,
+        match_report_id: int | None,
+        blueprint: InterviewBlueprint,
+        context: ToolCallContext,
+        idempotency_key: str,
+    ) -> InterviewSession:
+        data = await self._request(
+            "POST",
+            "/internal/agent/tools/interview-sessions",
+            context,
+            json={
+                "resumeText": resume_text,
+                "questionCount": question_count,
+                "resumeId": resume_id,
+                "forceCreate": force_create,
+                "llmProvider": llm_provider,
+                "skillId": skill_id,
+                "difficulty": difficulty,
+                "customCategories": [
+                    category.model_dump(by_alias=True) for category in custom_categories
+                ],
+                "jdText": jd_text,
+                "jobId": job_id,
+                "matchReportId": match_report_id,
+                "blueprint": blueprint.model_dump(by_alias=True),
+            },
+            idempotency_key=idempotency_key,
+        )
+        return InterviewSession.model_validate(data)
+
+    async def apply_interview_turn(
+        self,
+        session_id: str,
+        question_index: int,
+        answer: str | None,
+        action: str,
+        rationale: str,
+        answer_score: int,
+        feedback: str,
+        difficulty_adjustment: str,
+        next_question_intent: NextQuestionIntent | None,
+        evaluation: InterviewTurnEvaluation | None,
+        end_reason: str | None,
+        intent: str,
+        context: ToolCallContext,
+        idempotency_key: str,
+    ) -> InterviewTurnResult:
+        data = await self._request(
+            "POST",
+            f"/internal/agent/tools/interview-sessions/{session_id}/turns",
+            context,
+            json={
+                "questionIndex": question_index,
+                "answer": answer,
+                "action": action,
+                "rationale": rationale,
+                "answerScore": answer_score,
+                "feedback": feedback,
+                "difficultyAdjustment": difficulty_adjustment,
+                "nextQuestionIntent": (
+                    next_question_intent.model_dump(by_alias=True) if next_question_intent else None
+                ),
+                "evaluation": evaluation.model_dump(by_alias=True) if evaluation else None,
+                "endReason": end_reason,
+                "intent": intent,
+            },
+            idempotency_key=idempotency_key,
+        )
+        return InterviewTurnResult.model_validate(data)
 
     async def _request(
         self,

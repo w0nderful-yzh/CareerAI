@@ -10,7 +10,7 @@ from careerai_agent.models.factory import DynamicChatModelFactory
 
 
 class PlanDraft(BaseModel):
-    steps: list[str] = Field(min_length=2, max_length=6)
+    steps: list[str] = Field(min_length=5, max_length=5)
 
 
 class AgentPlanner(Protocol):
@@ -29,7 +29,8 @@ class LangChainAgentPlanner:
                 SystemMessage(
                     content=(
                         "你是 CareerAI 的业务执行规划器。只规划可由后续业务工具完成的步骤，"
-                        "不要声称已经执行，也不要输出对话建议。"
+                        "不要声称已经执行，也不要输出对话建议。严格按以下五个阶段规划："
+                        "读取简历和岗位、启动岗位匹配、读取匹配报告、决定准备策略、保存准备计划。"
                         f"\n{self._parser.get_format_instructions()}"
                     )
                 ),
