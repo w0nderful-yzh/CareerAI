@@ -27,6 +27,7 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.ai.converter.BeanOutputConverter;
 import org.springframework.core.io.ResourceLoader;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.type.TypeReference;
@@ -113,6 +114,24 @@ public class ResumeImprovementPlanService {
 
     public ResumeImprovementPlanDTO createPlan(CreateResumeImprovementPlanRequest request) {
         Long userId = currentUserService.currentUserId();
+        return createPlan(request, userId, null);
+    }
+
+    public ResumeImprovementPlanDTO createPlanIdempotently(
+        CreateResumeImprovementPlanRequest request,
+        String idempotencyKey
+    ) {
+        Long userId = currentUserService.currentUserId();
+        return planRepository.findByUserIdAndAgentIdempotencyKey(userId, idempotencyKey)
+            .map(this::toDTO)
+            .orElseGet(() -> createPlan(request, userId, idempotencyKey));
+    }
+
+    private ResumeImprovementPlanDTO createPlan(
+        CreateResumeImprovementPlanRequest request,
+        Long userId,
+        String idempotencyKey
+    ) {
         JobMatchReportEntity report = matchReportRepository.findByIdAndUserId(request.matchReportId(), userId)
             .orElseThrow(() -> new BusinessException(ErrorCode.JOB_MATCH_NOT_FOUND));
         ResumeEntity resume = resumeRepository.findByIdAndUserId(report.getResumeId(), userId)
@@ -139,8 +158,20 @@ public class ResumeImprovementPlanService {
         entity.setProjectUpgradeTasksJson(writeList(analysis.projectUpgradeTasks()));
         entity.setInterviewPracticeTasksJson(writeList(analysis.interviewPracticeTasks()));
         entity.setLearningTasksJson(writeList(analysis.learningTasks()));
+        entity.setAgentIdempotencyKey(idempotencyKey);
 
-        ResumeImprovementPlanEntity saved = planRepository.save(entity);
+        ResumeImprovementPlanEntity saved;
+        try {
+            // LLM 调用发生在事务外；最终写入再用唯一约束收敛并发重试。
+            saved = planRepository.saveAndFlush(entity);
+        } catch (DataIntegrityViolationException exception) {
+            if (idempotencyKey == null) {
+                throw exception;
+            }
+            return planRepository.findByUserIdAndAgentIdempotencyKey(userId, idempotencyKey)
+                .map(this::toDTO)
+                .orElseThrow(() -> exception);
+        }
         log.info(
             "简历改进计划已生成: planId={}, userId={}, matchReportId={}, resumeId={}, jobId={}",
             saved.getId(),

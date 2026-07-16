@@ -19,4 +19,9 @@ public interface ResumeImprovementPlanRepository extends JpaRepository<ResumeImp
     );
 
     Optional<ResumeImprovementPlanEntity> findByIdAndUserId(Long id, Long userId);
+
+    Optional<ResumeImprovementPlanEntity> findByUserIdAndAgentIdempotencyKey(
+        Long userId,
+        String agentIdempotencyKey
+    );
 }

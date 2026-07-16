@@ -1,6 +1,6 @@
 import {Link, Outlet, useLocation, useNavigate} from 'react-router-dom';
 import {motion} from 'framer-motion';
-import {BriefcaseBusiness, Calendar, ChevronRight, Database, FileStack, LogOut, MessageSquare, Moon, Settings, Sparkles, Sun, Users,} from 'lucide-react';
+import {Bot, BriefcaseBusiness, Calendar, ChevronRight, Database, FileStack, LogOut, MessageSquare, Moon, Settings, Sparkles, Sun, Users,} from 'lucide-react';
 import {useTheme} from '../hooks/useTheme';
 import {useState} from 'react';
 import UnifiedInterviewModal, {UnifiedInterviewConfig} from './UnifiedInterviewModal';
@@ -70,6 +70,7 @@ export default function Layout() {
       id: 'interview',
       title: '面试准备',
       items: [
+        { id: 'agent', path: '/agent', label: 'Agent 工作台', icon: Bot, description: '编排业务任务' },
         { id: 'resumes', path: '/history', label: '简历管理', icon: FileStack, description: '管理简历，AI 分析' },
         { id: 'jobs', path: '/jobs', label: '岗位中心', icon: BriefcaseBusiness, description: 'JD 解析，目标岗位' },
         { id: 'interview-hub', path: '/interview-hub', label: '模拟面试', icon: Sparkles, description: '文字面试练习' },

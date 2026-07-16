@@ -12,6 +12,7 @@ import jakarta.persistence.Index;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import java.time.LocalDateTime;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -22,6 +23,11 @@ import lombok.Setter;
     @Index(name = "idx_ai_task_user_created", columnList = "userId,createdAt"),
     @Index(name = "idx_ai_task_user_type_status", columnList = "userId,taskType,status"),
     @Index(name = "idx_ai_task_biz", columnList = "taskType,bizId")
+}, uniqueConstraints = {
+    @UniqueConstraint(
+        name = "uk_ai_task_agent_idempotency",
+        columnNames = {"userId", "taskType", "agentIdempotencyKey"}
+    )
 })
 @Getter
 @Setter
@@ -57,6 +63,10 @@ public class AiAnalysisTaskEntity {
 
   @Column(length = 1000)
   private String errorMessage;
+
+  /** 仅 Agent 写操作使用；普通页面请求保持为空。 */
+  @Column(length = 120)
+  private String agentIdempotencyKey;
 
   @Column(nullable = false, updatable = false)
   private LocalDateTime createdAt;

@@ -137,6 +137,13 @@ public class JobMatchService {
         return reports.stream().map(this::toDTO).toList();
     }
 
+    public JobMatchReportDTO getReport(Long id) {
+        Long userId = currentUserService.currentUserId();
+        return reportRepository.findByIdAndUserId(id, userId)
+            .map(this::toDTO)
+            .orElseThrow(() -> new BusinessException(ErrorCode.JOB_MATCH_NOT_FOUND));
+    }
+
     public String buildInterviewContext(Long matchReportId, Long jobId, Long resumeId) {
         Long userId = currentUserService.currentUserId();
         JobMatchReportEntity report = loadReportForInterview(userId, matchReportId, jobId, resumeId);

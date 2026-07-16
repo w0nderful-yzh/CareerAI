@@ -45,6 +45,12 @@ class AgentRun(BaseModel):
     artifacts: list[dict[str, Any]] = Field(default_factory=list)
     errors: list[dict[str, Any]] = Field(default_factory=list)
     pause_reason: str | None = None
+    selected_resume_id: int | None = None
+    job_id: int | None = None
+    match_task_id: int | None = None
+    match_report_id: int | None = None
+    improvement_plan_id: int | None = None
+    poll_count: int = 0
 
 
 class ApiResult[DataT](BaseModel):

@@ -4,7 +4,7 @@ Python orchestration service for the CareerAI execution Agent. It owns Agent run
 LangGraph checkpoints, while Java remains the only owner of resume, job, match, interview and
 schedule business data.
 
-## Current scaffold
+## Current capability
 
 - FastAPI application and health endpoint.
 - Authenticated Agent run creation and lookup.
@@ -15,10 +15,22 @@ schedule business data.
 - Protected model-config client for the Java `backend/agent-service`.
 - Dynamic `ChatOpenAI` factory keyed by Provider and config version.
 - LangChain planning node that uses the dynamically selected Agent model.
+- Eight typed LangChain business Tools backed by the protected Java bridge.
+- Executable `resume -> job -> match task -> match report -> improvement plan` graph.
+- `WAITING_ASYNC` checkpoint and authenticated resume endpoint for polling match tasks.
 - Gateway route at `/api/agent/**`.
 
-The initial graph intentionally pauses after creating the execution plan. Business tools are added
-in the next phase; the scaffold does not pretend that a user goal has been completed.
+The first executable flow requires `constraints.jobId`. `constraints.resumeId` is optional; when it
+is omitted, the graph selects the user's resume with the highest latest analysis score. If the Java
+match task is still pending, the run stops at `WAITING_ASYNC` and can be continued with:
+
+```http
+POST /api/agent/runs/{runId}/resume
+Authorization: Bearer <user token>
+```
+
+The user token is passed through LangGraph runtime context and is never stored in graph state or a
+checkpoint. Write Tools derive stable idempotency keys from `runId`.
 
 ## Setup
 
@@ -29,8 +41,20 @@ uv run uvicorn careerai_agent.main:app --reload --port 8000
 ```
 
 The default run endpoints require `careerai-app` on `http://localhost:8080` for `/api/auth/me`, and
-the Java Agent bridge on `http://localhost:8082` for `/internal/agent/model-config`. Configure the
-same `AGENT_INTERNAL_SERVICE_TOKEN` in the Python service and both Java services.
+the Java Agent bridge on `http://localhost:8082` for model config and `/internal/agent/tools/**`.
+Configure the same `AGENT_INTERNAL_SERVICE_TOKEN` in the Python service and both Java services.
+
+Example request:
+
+```json
+{
+  "goal": "为目标 Java 后端岗位生成简历改进计划",
+  "constraints": {
+    "jobId": 1,
+    "resumeId": 2
+  }
+}
+```
 
 ## Checkpointer
 

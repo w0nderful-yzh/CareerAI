@@ -23,6 +23,7 @@ const InterviewHubPage = lazy(() => import('./pages/InterviewHubPage'));
 const JobCenterPage = lazy(() => import('./pages/JobCenterPage'));
 const CareerReportPage = lazy(() => import('./pages/CareerReportPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
+const AgentTaskPage = lazy(() => import('./pages/AgentTaskPage'));
 const InterviewDetailPanel = lazy(() => import('./components/InterviewDetailPanel'));
 const AuthPage = lazy(() => import('./pages/AuthPage'));
 
@@ -207,6 +208,9 @@ function App() {
 
             {/* 岗位中心 */}
             <Route path="jobs" element={<JobCenterPage />} />
+
+            {/* Agent 业务任务执行台 */}
+            <Route path="agent" element={<AgentTaskPage />} />
 
             {/* 求职综合报告 */}
             <Route path="career-reports/:matchReportId" element={<CareerReportPage />} />

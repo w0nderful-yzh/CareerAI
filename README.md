@@ -4,7 +4,7 @@
 
 CareerAI 基于 [InterviewGuide](https://github.com/Snailclimb/interview-guide) 进行二次开发，围绕“简历、目标岗位和面试表现”建立完整求职闭环。项目下一阶段将从功能型 AI 应用升级为业务执行型 Agent，而不是在现有页面旁边增加一个问答聊天框。
 
-> 当前状态：Java 核心求职闭环已经进入可演示阶段。Python `agent-service` 已完成 FastAPI、LangGraph、checkpoint、Run 创建/查询和动态模型初始化；新增的 Java `backend/agent-service` 通过受保护内部接口读取 `careerai-app` 的 Agent 默认 Provider 配置。业务工具编排、暂停恢复接口、审批和 Agent 任务工作台仍待实现。
+> 当前状态：Java 核心求职闭环已经进入可演示阶段。Python `agent-service` 已完成动态模型、首批 LangChain Tools，以及“选择简历 → 异步岗位匹配 → 恢复轮询 → 创建改进计划”LangGraph 流程；Java `backend/agent-service` 提供受保护的模型配置和业务 Tool。面试/知识库扩展、通用暂停取消、审批和 Agent 任务工作台仍待实现。
 
 ## 项目定位
 
@@ -101,7 +101,7 @@ Agent 化必须具备以下特征：
 - 本地 Docker 中间件、GitHub Actions
 - OpenAPI、Micrometer、结构化日志与 Trace ID
 
-> Python Agent 服务当前只完成运行骨架，还没有接入简历、岗位、面试等业务工具。只有通过实现、测试、故障恢复和业务结果验收的能力才会写入最终项目简历。
+> Python Agent 服务已经绑定首批业务 Tool，并通过假服务测试验证异步等待、恢复和幂等键；真实跨进程链路完成验收后，才会作为完整 Agent 成果写入项目简历。
 
 ## 当前架构
 
@@ -163,7 +163,7 @@ flowchart TB
 - Python 负责目标解析、计划、工具选择、异步等待、checkpoint 和审批流程，不直接访问业务表。
 - 现有 Spring AI 继续负责已经成熟的 JD 解析、简历分析、岗位匹配和面试评分等领域能力。
 - Python LangChain/LangGraph 负责编排这些领域能力，不在首版重写全部 Java AI 逻辑。
-- Java `backend/agent-service` 是无数据库的内部适配层：当前只转发模型运行时配置，后续承载受控业务工具接口；Provider 数据和业务规则仍归 `careerai-app`。
+- Java `backend/agent-service` 是无数据库的内部适配层：转发模型运行时配置和受控业务 Tool；Provider 数据、用户鉴权和业务规则仍归 `careerai-app`。
 - Python 不保存 Provider 配置。每个 Run 读取一次 Java 配置快照，并按 `providerId + configVersion` 复用或重建 LangChain 模型。
 - Python `agent-service` 由 Gateway 固定路由；Java `backend/agent-service` 可注册 Nacos，但内部模型配置默认直连 `8082`。
 - MCP 只作为后续可选协议适配层，首版使用结构化 REST/OpenAPI 工具。
@@ -201,6 +201,8 @@ flowchart TB
 - [x] 输出执行型 Agent 改造方案、业务工具清单和验收标准。
 - [x] 创建 Python `agent-service`，接入 FastAPI、LangGraph 和可切换 checkpoint。
 - [x] 新增 Java `backend/agent-service` 内部桥接模块，打通 Provider 配置与 Python 动态模型初始化。
+- [x] 增加首批 Java 业务 Tool：简历读取、岗位读取、匹配任务/报告和简历改进计划。
+- [x] 在 Python 注册首批 LangChain Tools，实现异步匹配等待/恢复和改进计划产物。
 - [ ] 将简历、岗位、匹配、面试、日程和知识库能力封装为结构化 Agent Tools。
 - [ ] 实现“岗位 → 选简历 → 匹配 → 准备计划 → 模拟面试 → 综合报告”首个 Agent 闭环。
 - [ ] 实现异步任务等待、checkpoint 恢复、幂等调用和执行预算。
@@ -253,7 +255,7 @@ CareerAI/
 
 当前数据所有权仍只拆出知识库边界。`knowledge-service` 不访问用户表，只校验主应用签发的 JWT 并保存 `userId`；Java Agent 桥接不拥有数据库。数据库演进方案见 [数据库边界说明](docs/database-boundaries.md)。
 
-仓库根目录 `agent-service/` 是 Python 编排工程；`backend/agent-service/` 是 Java 内部桥接模块。浏览器只通过 Gateway 访问 Python 的 `/api/agent/**`，内部配置链路为 `Python -> Java agent-service -> careerai-app`，两个内部接口都校验 `X-Agent-Service-Token`。
+仓库根目录 `agent-service/` 是 Python 编排工程；`backend/agent-service/` 是 Java 内部桥接模块。浏览器只通过 Gateway 访问 Python 的 `/api/agent/**`，内部调用链为 `Python -> Java agent-service -> careerai-app`。业务 Tool 除校验 `X-Agent-Service-Token` 外，还必须透传用户 `Authorization`、`X-Agent-Run-Id` 和 `X-Agent-Step-Id`；写 Tool 额外要求 `Idempotency-Key`。
 
 ## 本地开发
 
@@ -279,6 +281,8 @@ sdk env
 ```bash
 cd backend
 mvn clean test
+# 首次启动或 shared 契约变化后，刷新单模块运行所读取的本地依赖
+mvn -pl careerai-shared install -DskipTests
 mvn -pl careerai-app spring-boot:run
 mvn -pl knowledge-service spring-boot:run
 mvn -pl agent-service spring-boot:run
@@ -351,9 +355,15 @@ Agent 模型配置内部调用链：
 | Python `agent-service` | `GET http://localhost:8082/internal/agent/model-config` |
 | Java `backend/agent-service` | OpenFeign 调用 `careerai-app /internal/agent/model-config` |
 
+首批业务 Tool 统一挂在 Java `backend/agent-service` 的 `/internal/agent/tools` 下，包括：
+
+- 简历列表/详情、岗位详情；
+- 创建/查询岗位匹配任务、读取匹配报告；
+- 创建/查询简历改进计划。
+
 运行前必须让三个进程使用相同的 `AGENT_INTERNAL_SERVICE_TOKEN`。Provider 设置页可以单独选择“Agent 默认”，切换后下一个 Run 自动使用新模型，无需重启 Python。
 
-已有数据库升级时执行 [Agent 默认 Provider 迁移脚本](docs/sql/20260716-add-agent-default-provider.sql)；本地 `ddl-auto=update` 会先创建可空列，启动引导逻辑负责回填现有数据。
+已有数据库升级时执行 [Agent 默认 Provider 迁移脚本](docs/sql/20260716-add-agent-default-provider.sql) 和 [Agent Tool 幂等键迁移脚本](docs/sql/20260716-add-agent-tool-idempotency.sql)；本地 `ddl-auto=update` 会同步可空字段。
 
 启动前端：
 
@@ -371,13 +381,15 @@ pnpm dev
 
 1. [x] 创建 Python `agent-service`，实现 Agent Run 创建/查询、checkpoint 和 Java 身份校验骨架。
 2. [x] 增加 Java 内部桥接服务和 Agent 默认 Provider，支持 Python 动态初始化/切换模型。
-3. [ ] 增加暂停、恢复、取消和 SSE 运行事件接口。
-4. [ ] 接入简历、岗位、匹配报告、面试、日程和知识库只读工具，验证用户隔离和工具契约。
-5. [ ] 接入 JD 解析、岗位创建、异步岗位匹配、改进计划和综合报告，完成首个跨模块执行闭环。
-6. [ ] 新增简历草稿版本和准备任务，把 AI 建议转成可查询、可完成的业务产物。
-7. [ ] 接入日程和关键状态写工具，实现批准、编辑和拒绝三种人工决策。
-8. [ ] 将前端升级为 Agent 任务工作台，展示计划、执行时间线、审批和最终产物。
-9. [ ] 使用固定场景验证目标完成率、工具选择、重复写入、越权和故障恢复。
+3. [x] 增加首批 Java Tool 契约，打通简历、岗位、异步匹配和改进计划调用链。
+4. [x] 在 Python 中注册首批 Tool，并实现异步任务等待和 LangGraph 状态流转。
+5. [ ] 增加暂停、恢复、取消和 SSE 运行事件接口。
+6. [ ] 接入面试、日程和知识库工具，验证用户隔离和工具契约。
+7. [ ] 接入 JD 解析、岗位创建和综合报告，完成首个跨模块执行闭环。
+8. [ ] 新增简历草稿版本和准备任务，把 AI 建议转成可查询、可完成的业务产物。
+9. [ ] 接入日程和关键状态写工具，实现批准、编辑和拒绝三种人工决策。
+10. [ ] 将前端升级为 Agent 任务工作台，展示计划、执行时间线、审批和最终产物。
+11. [ ] 使用固定场景验证目标完成率、工具选择、重复写入、越权和故障恢复。
 
 首版只实现一个“求职作战 Agent”，不引入多个子 Agent。ASR/TTS、HR 企业端、自动登录招聘网站投递和支付功能不进入当前范围。
 

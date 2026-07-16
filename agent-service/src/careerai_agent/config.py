@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     careerai_api_base_url: AnyHttpUrl = AnyHttpUrl("http://localhost:8080")
     model_config_base_url: AnyHttpUrl = AnyHttpUrl("http://localhost:8082")
+    business_tool_base_url: AnyHttpUrl = AnyHttpUrl("http://localhost:8082")
     internal_service_token: SecretStr | None = None
     request_timeout_seconds: float = Field(default=30.0, gt=0, le=300)
     checkpointer_backend: Literal["memory", "postgres"] = "memory"
