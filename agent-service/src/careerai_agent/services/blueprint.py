@@ -41,6 +41,8 @@ class InterviewBlueprintPlanner(Protocol):
 
 
 class LangChainInterviewBlueprintPlanner:
+    """规划“考什么、怎么考”，具体题目文本仍交给 Java 领域服务生成。"""
+
     def __init__(self, model_factory: DynamicChatModelFactory) -> None:
         self._model_factory = model_factory
         self._parser = PydanticOutputParser(pydantic_object=InterviewBlueprint)
@@ -133,6 +135,7 @@ class LangChainInterviewBlueprintPlanner:
         report: JobMatchReport | None,
         planning_context: InterviewPlanningContext,
     ) -> InterviewBlueprint:
+        # 模型输出先与真实报告和请求取交集，防止虚构 requirement ID 或越过题目预算。
         allowed_requirement_ids = (
             {mapping.requirement.id for mapping in report.evidence_mappings} if report else set()
         )

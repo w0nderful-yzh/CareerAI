@@ -43,6 +43,7 @@ public class JobMatchRabbitListener {
 
     try {
       process(taskMessage);
+      // 业务报告和任务状态都保存成功后才确认消息，避免“消息已确认但结果未落库”。
       channel.basicAck(deliveryTag, false);
     } catch (Exception e) {
       handleFailure(taskMessage, deliveryTag, channel, e);
@@ -56,6 +57,7 @@ public class JobMatchRabbitListener {
       return;
     }
     if (task.getStatus() == AsyncTaskStatus.COMPLETED) {
+      // RabbitMQ 可能重复投递，完成态任务不再次调用模型生成第二份报告。
       log.info("岗位匹配任务已完成，忽略重复消息: taskId={}", message.taskId());
       return;
     }
@@ -97,6 +99,7 @@ public class JobMatchRabbitListener {
     }
 
     if (nextAttempt <= maxRetries) {
+      // 先发布带新 attempt 的重试消息，再确认当前消息；超过上限后 reject 进入 DLQ。
       producer.sendRetry(new JobMatchTaskMessage(
           message.taskId(),
           message.userId(),

@@ -39,6 +39,10 @@ import tools.jackson.core.JacksonException;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
 
+/**
+ * 将岗位匹配证据、Agent 准备策略和最近一次岗位面试复盘合并成可执行计划。
+ * Python 决定准备方向，Java 负责读取真实业务数据、生成具体任务并幂等落库。
+ */
 @Slf4j
 @Service
 public class ResumeImprovementPlanService {
@@ -142,6 +146,7 @@ public class ResumeImprovementPlanService {
         String idempotencyKey,
         AgentResumeImprovementPlanCommand agentDecision
     ) {
+        // report 是关联简历和岗位的可信根，后续对象都必须在同一用户范围内重新查询。
         JobMatchReportEntity report = matchReportRepository.findByIdAndUserId(matchReportId, userId)
             .orElseThrow(() -> new BusinessException(ErrorCode.JOB_MATCH_NOT_FOUND));
         ResumeEntity resume = resumeRepository.findByIdAndUserId(report.getResumeId(), userId)
@@ -153,6 +158,7 @@ public class ResumeImprovementPlanService {
             throw new BusinessException(ErrorCode.RESUME_PARSE_FAILED, "简历文本为空，请重新上传或解析简历");
         }
 
+        // 先在事务外完成耗时模型调用，避免数据库连接和锁被外部请求长期占用。
         PlanAnalysisDTO analysis = generatePlan(
             resume,
             job,
@@ -244,6 +250,7 @@ public class ResumeImprovementPlanService {
     }
 
     private String findLatestJobEvaluation(Long userId, JobMatchReportEntity report) {
+        // 只回流同一用户、同一岗位且同一简历的最近面试，避免不同求职目标互相污染。
         return interviewSessionRepository.findByUserIdAndJobIdOrderByCreatedAtDesc(userId, report.getJobId()).stream()
             .filter(session -> report.getResumeId().equals(session.getResumeId()))
             .filter(session -> session.getJobEvaluationJson() != null && !session.getJobEvaluationJson().isBlank())

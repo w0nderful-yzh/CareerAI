@@ -41,6 +41,8 @@ def build_interview_graph(
     InterviewTurnState,
     InterviewTurnState,
 ]:
+    """正式回答链路：读取 Java 事实、生成结构化决策、再交回 Java 校验执行。"""
+
     async def load_context(
         state: InterviewTurnState,
         runtime: Runtime[InterviewRuntimeContext],
@@ -63,6 +65,7 @@ def build_interview_graph(
         state: InterviewTurnState,
         runtime: Runtime[InterviewRuntimeContext],
     ) -> InterviewTurnState:
+        # Python 不保存回答、不推进题号；只把结构化决策交给 Java 领域服务。
         decision = state["decision"]
         if decision is None:
             raise RuntimeError("interview decision is missing")
@@ -134,6 +137,7 @@ class AdaptiveInterviewService:
         authorization: str,
     ) -> InterviewTurnResult:
         resolved_intent = resolve_interview_intent(intent, answer)
+        # 辅助和控制意图不能进入正式评分图，否则会污染回答证据与能力画像。
         if resolved_intent in {InterviewIntent.HINT, InterviewIntent.EXPLAIN}:
             return await self._assist(
                 session_id,
@@ -242,6 +246,7 @@ class AdaptiveInterviewService:
         decision = await self._decision_maker.decide(interview_context, answer)
 
         yield "progress", {"phase": "question", "label": "正在结合简历与 JD 生成下一题"}
+        # 同一 session+question 派生稳定幂等键，SSE 断线重试也不会重复推进题号。
         apply_context = ToolCallContext(
             authorization=authorization,
             run_id=run_id,

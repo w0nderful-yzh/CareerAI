@@ -313,6 +313,7 @@ public class InterviewSessionService {
             return applyControlTurn(sessionId, command, intent);
         }
         requireAdaptiveCommand(command);
+        // 同一题已执行过决策时直接重建结果，防止 Agent/SSE 重试把会话推进两次。
         Optional<AgentInterviewDecision> existing = persistenceService.getAgentDecisions(sessionId).stream()
             .filter(item -> item.questionIndex() == command.questionIndex())
             .findFirst();
@@ -334,6 +335,7 @@ public class InterviewSessionService {
         boolean requestedEnd = ACTION_END_INTERVIEW.equals(command.action());
         InterviewQuestionDTO target = null;
         if (!requestedEnd && questions.size() < entity.getTotalQuestions()) {
+            // Python 只给下一题意图；Java 校验蓝图、追问关系和难度后才生成最终题目。
             validateNextQuestionIntent(command, current, questions, blueprint, entity.getDifficulty());
             target = generateNextQuestion(
                 entity, blueprint, command.nextQuestionIntent(), current, command.answer(), questions);
@@ -359,6 +361,7 @@ public class InterviewSessionService {
             command.action(),
             command.rationale()
         );
+        // 能力画像只读取已经持久化的正式回答，Hint/Skip 等控制意图不会走到这里。
         abilityProfileService.recordTurn(sessionId, current, savedAnswer, command.evaluation());
         if (target != null) {
             persistenceService.appendQuestion(

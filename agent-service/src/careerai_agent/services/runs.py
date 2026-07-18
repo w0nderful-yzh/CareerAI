@@ -9,6 +9,8 @@ from careerai_agent.graph.state import CareerAgentState, GraphRuntimeContext
 
 
 class RunService:
+    """驱动准备 Agent，并把一次业务执行绑定到同一个 LangGraph checkpoint。"""
+
     def __init__(
         self,
         graph: CompiledStateGraph[
@@ -26,6 +28,7 @@ class RunService:
         user_id: str,
         authorization: str,
     ) -> AgentRun:
+        # run_id 同时是对外查询 ID 和 LangGraph thread_id，后续恢复必须复用它。
         run_id = str(uuid4())
         initial_state: CareerAgentState = {
             "id": run_id,
@@ -55,6 +58,7 @@ class RunService:
     async def get_run(self, run_id: str, user_id: str) -> AgentRun | None:
         snapshot = await self._graph.aget_state(self._config(run_id))
         values = cast(CareerAgentState, snapshot.values)
+        # checkpoint 本身不负责业务用户隔离，读取后仍要核对 state 中的 user_id。
         if not values or values.get("user_id") != user_id:
             return None
         return AgentRun.model_validate(values)
@@ -65,6 +69,7 @@ class RunService:
         user_id: str,
         authorization: str,
     ) -> AgentRun | None:
+        # 不创建新 State，而是从原快照重新进入 dispatch，由已有业务 ID 决定续跑节点。
         snapshot = await self._graph.aget_state(self._config(run_id))
         values = cast(CareerAgentState, snapshot.values)
         if not values or values.get("user_id") != user_id:
