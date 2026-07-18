@@ -33,6 +33,10 @@ import tools.jackson.core.JacksonException;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
 
+/**
+ * 岗位匹配领域服务：读取当前用户的简历与岗位，调用模型建立要求—证据矩阵，
+ * 再由 Java 归一化并保存为后续 Agent、面试和准备计划共同使用的业务报告。
+ */
 @Slf4j
 @Service
 public class JobMatchService {
@@ -106,6 +110,7 @@ public class JobMatchService {
     }
 
     public JobMatchReportDTO createReportForUser(Long userId, Long resumeId, Long jobId) {
+        // 所有输入都按 userId 从业务库读取，调用方不能提交一份脱离用户边界的任意文本。
         ResumeEntity resume = resumePersistenceService.findByIdAndUserId(resumeId, userId)
             .orElseThrow(() -> new BusinessException(ErrorCode.RESUME_NOT_FOUND));
         JobEntity job = jobRepository.findByIdAndUserId(jobId, userId)
@@ -115,6 +120,7 @@ public class JobMatchService {
             throw new BusinessException(ErrorCode.RESUME_PARSE_FAILED, "简历文本为空，请重新上传或解析简历");
         }
 
+        // 模型调用不包在数据库事务里；拿到结构化结果后才组装并保存报告。
         JobMatchAnalysisDTO analysis = analyzeMatch(resume, job);
         JobMatchReportEntity entity = new JobMatchReportEntity();
         entity.setUserId(userId);
@@ -285,6 +291,7 @@ public class JobMatchService {
                 truncate(defaultText(requirement.sourceQuote(), "JD 未提供可引用原文"), 500)
             );
             List<ResumeEvidenceDTO> safeEvidence = normalizeResumeEvidence(mapping.resumeEvidence());
+            // 模型枚举、长度和分数都在 Java 白名单内收敛，非法值不能直接进入业务报告。
             normalized.add(new RequirementEvidenceDTO(
                 safeRequirement,
                 safeEvidence,

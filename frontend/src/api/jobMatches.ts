@@ -48,44 +48,10 @@ export interface JobMatchReport {
   createdAt: string;
 }
 
-export type JobMatchTaskStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
-
-export interface JobMatchTask {
-  id: number;
-  status: JobMatchTaskStatus;
-  resumeId: number;
-  jobId: number;
-  reportId?: number;
-  retryCount: number;
-  errorMessage?: string;
-  report?: JobMatchReport;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface CreateJobMatchRequest {
-  resumeId: number;
-  jobId: number;
-}
-
 export const jobMatchApi = {
   list(jobId?: number) {
     return request.get<JobMatchReport[]>('/api/job-matches', {
       params: jobId ? { jobId } : undefined,
     });
-  },
-
-  create(data: CreateJobMatchRequest) {
-    return request.post<JobMatchReport>('/api/job-matches', data, {
-      timeout: 180000,
-    });
-  },
-
-  createTask(data: CreateJobMatchRequest) {
-    return request.post<JobMatchTask>('/api/job-matches/tasks', data);
-  },
-
-  getTask(taskId: number) {
-    return request.get<JobMatchTask>(`/api/job-matches/tasks/${taskId}`);
   },
 };

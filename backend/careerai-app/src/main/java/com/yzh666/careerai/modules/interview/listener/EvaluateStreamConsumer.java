@@ -129,6 +129,7 @@ public class EvaluateStreamConsumer extends AbstractStreamConsumer<EvaluateStrea
         );
 
         List<InterviewAnswerEntity> answers = persistenceService.findAnswersBySessionId(sessionId);
+        // questionsJson 保存题目快照，正式回答单独落表；评估前重新合并两份事实。
         for (InterviewAnswerEntity answer : answers) {
             int index = answer.getQuestionIndex();
             if (index >= 0 && index < questions.size()) {
@@ -147,6 +148,7 @@ public class EvaluateStreamConsumer extends AbstractStreamConsumer<EvaluateStrea
 
         String resumeText = session.getResume() != null ? session.getResume().getResumeText() : "";
         InterviewReportDTO report = evaluationService.evaluateInterview(chatClient, sessionId, resumeText, questions);
+        // 先保存模型报告，再用确定性规则生成 Closure；消息重试由两层幂等共同兜底。
         persistenceService.saveReport(sessionId, report);
         interviewClosureService.finalizeSession(sessionId, report);
     }

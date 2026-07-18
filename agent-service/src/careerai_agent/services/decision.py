@@ -65,6 +65,8 @@ class PreparationDecisionMaker(Protocol):
 
 
 class LangChainPreparationDecisionMaker:
+    """把岗位匹配证据压缩成下一步策略，不直接创建或修改任何业务对象。"""
+
     def __init__(self, model_factory: DynamicChatModelFactory) -> None:
         self._model_factory = model_factory
         self._parser = PydanticOutputParser(pydantic_object=PreparationDecision)
@@ -76,6 +78,7 @@ class LangChainPreparationDecisionMaker:
         report: JobMatchReport,
     ) -> PreparationDecision:
         try:
+            # report 已由 Java 校验并持久化；模型只能基于其中证据选择白名单动作。
             model = await self._model_factory.get_chat_model()
             response = await model.ainvoke(
                 [

@@ -10,11 +10,4 @@ export const resumeApi = {
     formData.append('file', file);
     return request.upload<UploadResponse>('/api/resumes/upload', formData);
   },
-
-  /**
-   * 健康检查
-   */
-  async healthCheck(): Promise<{ status: string; service: string }> {
-    return request.get('/api/resumes/health');
-  },
 };

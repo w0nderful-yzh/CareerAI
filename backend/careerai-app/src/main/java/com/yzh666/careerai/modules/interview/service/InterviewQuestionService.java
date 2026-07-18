@@ -23,8 +23,6 @@ import org.springframework.ai.converter.BeanOutputConverter;
 import org.springframework.core.io.ResourceLoader;
 import org.springframework.stereotype.Service;
 
-import jakarta.annotation.PreDestroy;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -33,16 +31,11 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
 /**
  * 面试问题生成服务
- * 无简历：单次 Skill 驱动出题
- * 有简历：并行调用（简历题 60% + 方向题 40%）
+ * 根据 Agent 面试蓝图生成开场题，并按每轮受控意图增量生成下一题。
  */
 @Service
 public class InterviewQuestionService {
@@ -53,7 +46,6 @@ public class InterviewQuestionService {
     private static final int MAX_FOLLOW_UP_COUNT = 2;
     private static final int OPENING_QUESTION_CANDIDATE_COUNT = 3;
     private static final double TOPIC_REPEAT_SIMILARITY = 0.42;
-    private static final double RESUME_QUESTION_RATIO = 0.6;
 
     private static final String GENERIC_MODE_SYSTEM_APPEND = """
         \n\n# 通用面试模式
@@ -86,7 +78,6 @@ public class InterviewQuestionService {
     private final InterviewSkillService skillService;
     private final LlmProviderRegistry llmProviderRegistry;
     private final PromptSanitizer promptSanitizer;
-    private final ExecutorService questionExecutor;
     private final int followUpCount;
 
     private record QuestionListDTO(List<QuestionDTO> questions) {}
@@ -105,7 +96,6 @@ public class InterviewQuestionService {
         this.skillService = skillService;
         this.llmProviderRegistry = llmProviderRegistry;
         this.promptSanitizer = promptSanitizer;
-        this.questionExecutor = Executors.newVirtualThreadPerTaskExecutor();
         this.skillSystemPromptTemplate = loadTemplate(resourceLoader, properties.getQuestionSystemPromptPath());
         this.skillUserPromptTemplate = loadTemplate(resourceLoader, properties.getQuestionUserPromptPath());
         this.resumeSystemPromptTemplate = loadTemplate(resourceLoader, properties.getResumeQuestionSystemPromptPath());
@@ -116,92 +106,6 @@ public class InterviewQuestionService {
 
     private static PromptTemplate loadTemplate(ResourceLoader loader, String location) throws IOException {
         return new PromptTemplate(loader.getResource(location).getContentAsString(StandardCharsets.UTF_8));
-    }
-
-    @PreDestroy
-    void destroy() {
-        questionExecutor.shutdownNow();
-    }
-
-    public List<InterviewQuestionDTO> generateQuestionsBySkill(
-            String llmProvider,
-            String skillId,
-            String difficulty,
-            String resumeText,
-            int questionCount,
-            List<HistoricalQuestion> historicalQuestions,
-            List<CategoryDTO> customCategories,
-            String jdText,
-            String jobMatchContext,
-            InterviewBlueprintDTO blueprint) {
-
-        SkillDTO skill = resolveSkill(skillId, customCategories, jdText);
-        String difficultyDesc = resolveDifficulty(difficulty);
-        ChatClient questionChatClient =
-            llmProviderRegistry.getPlainChatClient(llmProvider);
-
-        boolean hasResume = resumeText != null && !resumeText.isBlank();
-        String historicalSection = buildHistoricalSection(historicalQuestions);
-        int effectiveFollowUpCount = blueprint == null
-            ? followUpCount : Math.min(followUpCount, blueprint.maxFollowUpsPerTopic());
-        String blueprintSection = buildBlueprintSection(blueprint);
-        if (!hasResume) {
-            return generateDirectionOnly(questionChatClient, skill, difficultyDesc, questionCount,
-                historicalSection, jobMatchContext, blueprintSection, effectiveFollowUpCount);
-        }
-        if (questionCount == 1) {
-            return generateResumeQuestions(questionChatClient, resumeText, 1, skill,
-                difficultyDesc, historicalSection, jobMatchContext, blueprintSection,
-                effectiveFollowUpCount);
-        }
-
-        int resumeCount = Math.max(1, (int) Math.round(questionCount * RESUME_QUESTION_RATIO));
-        int directionCount = questionCount - resumeCount;
-
-        log.info("并行出题: skill={}, total={}, resumeCount={}, directionCount={}",
-            skillId, questionCount, resumeCount, directionCount);
-
-        CompletableFuture<List<InterviewQuestionDTO>> resumeFuture = CompletableFuture.supplyAsync(
-            () -> generateResumeQuestions(questionChatClient, resumeText, resumeCount, skill,
-                difficultyDesc, historicalSection, jobMatchContext, blueprintSection,
-                effectiveFollowUpCount),
-            questionExecutor);
-
-        CompletableFuture<List<InterviewQuestionDTO>> directionFuture = CompletableFuture.supplyAsync(
-            () -> generateDirectionOnly(questionChatClient, skill, difficultyDesc, directionCount,
-                historicalSection, jobMatchContext, blueprintSection, effectiveFollowUpCount),
-            questionExecutor);
-
-        List<InterviewQuestionDTO> resumeQuestions;
-        List<InterviewQuestionDTO> directionQuestions;
-        try {
-            resumeQuestions = resumeFuture.join();
-        } catch (CompletionException e) {
-            log.error("简历题生成失败，降级为全方向题", e.getCause());
-            directionFuture.cancel(true);
-            return generateDirectionOnly(questionChatClient, skill, difficultyDesc, questionCount,
-                historicalSection, jobMatchContext, blueprintSection, effectiveFollowUpCount);
-        }
-
-        try {
-            directionQuestions = directionFuture.join();
-        } catch (CompletionException e) {
-            log.error("方向题生成失败，降级为全简历题", e.getCause());
-            if (resumeQuestions.isEmpty()) {
-                return generateFallbackQuestions(skill, questionCount, effectiveFollowUpCount);
-            }
-            return resumeQuestions;
-        }
-
-        if (resumeQuestions.isEmpty() && directionQuestions.isEmpty()) {
-            log.warn("简历题和方向题均为空，回退到默认问题");
-            return generateFallbackQuestions(skill, questionCount, effectiveFollowUpCount);
-        }
-
-        List<InterviewQuestionDTO> merged = mergeQuestionBatches(resumeQuestions, directionQuestions);
-        log.info("并行出题成功: 简历题={}, 方向题={}, 合计={}",
-            resumeQuestions.size(), directionQuestions.size(), merged.size());
-        return merged;
     }
 
     /**
@@ -524,27 +428,6 @@ public class InterviewQuestionService {
             log.error("方向题生成失败，回退到默认问题: {}", e.getMessage(), e);
             return generateFallbackQuestions(skill, questionCount, effectiveFollowUpCount);
         }
-    }
-
-    private List<InterviewQuestionDTO> mergeQuestionBatches(
-            List<InterviewQuestionDTO> first, List<InterviewQuestionDTO> second) {
-        if (second.isEmpty()) {
-            return first;
-        }
-        if (first.isEmpty()) {
-            return second;
-        }
-        int offset = first.size();
-        List<InterviewQuestionDTO> merged = new ArrayList<>(first);
-        for (InterviewQuestionDTO q : second) {
-            int newIndex = q.questionIndex() + offset;
-            Integer newParent = q.parentQuestionIndex() != null
-                ? q.parentQuestionIndex() + offset : null;
-            merged.add(InterviewQuestionDTO.create(
-                newIndex, q.question(), q.type(), q.category(),
-                q.topicSummary(), q.isFollowUp(), newParent, q.requirementId()));
-        }
-        return merged;
     }
 
     private SkillDTO resolveSkill(String skillId, List<CategoryDTO> customCategories, String jdText) {

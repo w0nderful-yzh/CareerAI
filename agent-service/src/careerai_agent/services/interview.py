@@ -119,12 +119,15 @@ def resolve_interview_intent(requested: InterviewIntent, text: str) -> Interview
 
 
 class LangChainInterviewDecisionMaker:
+    """评价当前回答并选择下一题方向；不生成最终题目，也不直接推进 Java Session。"""
+
     def __init__(self, model_factory: DynamicChatModelFactory) -> None:
         self._model_factory = model_factory
         self._parser = PydanticOutputParser(pydantic_object=InterviewDecision)
 
     async def decide(self, context: InterviewTurnContext, answer: str) -> InterviewDecision:
         try:
+            # 上下文中的蓝图、能力画像和 requirement ID 都来自 Java 业务快照。
             model = await self._model_factory.get_chat_model()
             response = await model.ainvoke(
                 [
@@ -185,6 +188,7 @@ class LangChainInterviewDecisionMaker:
         context: InterviewTurnContext,
         intent: InterviewIntent,
     ) -> AsyncIterator[str]:
+        # Hint/Explain 是即时辅助文本，不形成评分、能力观察或新的面试题。
         if intent not in {InterviewIntent.HINT, InterviewIntent.EXPLAIN}:
             raise InterviewDecisionError("unsupported interview assistance intent")
         instruction = (

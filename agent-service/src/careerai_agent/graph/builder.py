@@ -39,10 +39,14 @@ def build_graph(
     CareerAgentState,
     CareerAgentState,
 ]:
+    """构建岗位准备主图：Python 只编排步骤，业务读写全部通过受保护 Tool 完成。"""
+
     async def dispatch(state: CareerAgentState) -> CareerAgentState:
+        # 恢复 Run 时先保持 State 不变，真正的续跑位置由 route_from_dispatch 判断。
         return state
 
     async def initialize_plan(state: CareerAgentState) -> CareerAgentState:
+        # 计划用于展示执行进度；真实可执行节点仍由下面的固定状态机约束。
         steps = await planner.create_plan(state["goal"], state["constraints"])
         return {
             **state,
@@ -96,6 +100,7 @@ def build_graph(
         except (BusinessToolError, httpx.HTTPError, ValidationError) as exc:
             return _failed(state, "load_business_context", exc, plan_index=0)
 
+        # artifact 是 Agent 可解释、可恢复的业务快照，不替代 Java 中的真实 Resume/Job。
         artifact = {
             "type": "business_context",
             "resumeId": resume.id,
@@ -129,6 +134,7 @@ def build_graph(
             _tool_context(state, runtime, "start_job_match"),
         )
         try:
+            # 写 Tool 使用 run/step 派生的幂等键，恢复或网络重试不会重复建任务。
             task = tool_result(
                 await tools.start_job_match.ainvoke({"resume_id": resume_id, "job_id": job_id}),
                 JobMatchTask,
@@ -170,6 +176,7 @@ def build_graph(
                 JobMatchTask,
             )
             if task.status in {"PENDING", "PROCESSING"}:
+                # 这里不阻塞等待 Java 消费消息；保存 task_id 后结束本轮，由调用方稍后恢复。
                 return {
                     **state,
                     "status": RunStatus.WAITING_ASYNC.value,
@@ -322,6 +329,7 @@ def build_graph(
         }
 
     def route_from_dispatch(state: CareerAgentState) -> str:
+        # State 中已保存的业务 ID 是恢复游标：走过的写节点不会因为 resume 再执行一次。
         if state["status"] in {
             RunStatus.COMPLETED.value,
             RunStatus.FAILED.value,

@@ -32,11 +32,6 @@ public class JobController {
         return Result.success(jobService.listJobs(status));
     }
 
-    @GetMapping("/api/jobs/{id}")
-    public Result<JobDTO> getJob(@PathVariable Long id) {
-        return Result.success(jobService.getJob(id));
-    }
-
     @PostMapping("/api/jobs/parse-jd")
     @RateLimit(dimension = RateLimit.Dimension.IP, count = 5)
     public Result<JobParseResponse> parseJd(@Valid @RequestBody JobParseRequest request) {

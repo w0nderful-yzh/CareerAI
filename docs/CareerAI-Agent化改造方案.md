@@ -253,12 +253,11 @@ Java 是业务事实的唯一写入方，Python 是业务能力的编排方。
 | `list_resumes` | `GET /api/resumes` | 获取当前用户可用简历 |
 | `get_resume_detail` | `GET /api/resumes/{id}/detail` | 读取简历文本和分析结果 |
 | `list_target_jobs` | `GET /api/jobs` | 获取目标岗位和状态 |
-| `get_target_job` | `GET /api/jobs/{id}` | 获取 JD 和结构化方向 |
+| `get_target_job` | `GET /internal/agent/tools/jobs/{jobId}` | 获取 JD 和结构化方向 |
 | `list_job_match_reports` | `GET /api/job-matches` | 获取岗位已有匹配报告 |
-| `get_job_match_task` | `GET /api/job-matches/tasks/{taskId}` | 查询异步匹配任务状态 |
+| `get_job_match_task` | `GET /internal/agent/tools/job-match-tasks/{taskId}` | 查询异步匹配任务状态 |
 | `list_interview_sessions` | `GET /api/interview/sessions` | 获取历史模拟面试 |
 | `get_interview_report` | `GET /api/interview/sessions/{sessionId}/report` | 获取面试评分和薄弱项 |
-| `list_interview_schedules` | `GET /api/interview-schedule` | 检查日程冲突 |
 | `get_career_report` | `GET /api/career-reports/{matchReportId}` | 获取综合报告 |
 | `search_knowledge_bases` | `GET /api/knowledgebase/search` | 找到可用知识库 |
 | `query_knowledge_base` | `POST /api/knowledgebase/query` | 为准备任务检索依据 |
@@ -269,16 +268,13 @@ Java 是业务事实的唯一写入方，Python 是业务能力的编排方。
 | --- | --- | --- | --- |
 | `parse_job_description` | `POST /api/jobs/parse-jd` | 只读计算 | 自动执行 |
 | `create_target_job` | `POST /api/jobs` | 低风险写入 | 首版可自动，结果可撤销 |
-| `start_job_match` | `POST /api/job-matches/tasks` | 异步计算/计费 | 默认自动，受配额限制 |
-| `create_improvement_plan` | `POST /api/resume-improvement-plans` | 生成业务产物 | 自动执行 |
-| `parse_interview_invitation` | `POST /api/interview-schedule/parse` | 只读计算 | 自动执行 |
-| `create_mock_interview` | `POST /api/interview/sessions` | 创建会话 | 用户已明确要求时自动 |
+| `start_job_match` | `POST /internal/agent/tools/job-match-tasks` | 异步计算/计费 | 默认自动，受配额限制 |
+| `create_improvement_plan` | `POST /internal/agent/tools/resume-improvement-plans` | 生成业务产物 | 自动执行 |
+| `create_mock_interview` | `POST /internal/agent/tools/interview-sessions` | 创建会话 | 用户已明确要求时自动 |
 | `complete_mock_interview` | `POST /api/interview/sessions/{id}/complete` | 状态终结 | 必须审批 |
-| `create_interview_schedule` | `POST /api/interview-schedule` | 外部时间承诺 | 必须审批 |
-| `update_interview_schedule` | `PUT /api/interview-schedule/{id}` | 修改时间 | 必须审批 |
 | `update_job_status` | `PATCH /api/jobs/{id}/status` | 改变求职事实 | `APPLIED/OFFER/REJECTED` 必须审批 |
 
-删除岗位、简历、面试、知识库和日程的接口不进入首版 Agent 工具集。
+删除岗位、简历、面试和知识库的接口不进入首版 Agent 工具集。
 
 ### 5.4 必须新增的业务工具
 

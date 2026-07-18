@@ -18,11 +18,14 @@ class AgentPlanner(Protocol):
 
 
 class LangChainAgentPlanner:
+    """生成给用户展示的五步计划；可执行节点仍由 LangGraph 固定拓扑决定。"""
+
     def __init__(self, model_factory: DynamicChatModelFactory) -> None:
         self._model_factory = model_factory
         self._parser = PydanticOutputParser(pydantic_object=PlanDraft)
 
     async def create_plan(self, goal: str, constraints: dict[str, Any]) -> list[PlanStep]:
+        # 当前提示词已固定五个阶段，模型只负责结合目标改写步骤标题，不负责发明新流程。
         model = await self._model_factory.get_chat_model()
         response = await model.ainvoke(
             [

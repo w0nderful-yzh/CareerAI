@@ -46,10 +46,13 @@ def build_interview_creation_graph(
     InterviewCreationState,
     InterviewCreationState,
 ]:
+    """创建面试的三段式流程：读取事实、规划蓝图、调用 Java 创建真实 Session。"""
+
     async def load_context(
         state: InterviewCreationState,
         runtime: Runtime[InterviewCreationRuntimeContext],
     ) -> InterviewCreationState:
+        # 所有简历、岗位和历史画像都从 Java Tool 读取，Python 不直接访问业务库。
         request = state["request"]
         tools = build_business_tools(business_client, _context(runtime, "load_blueprint_context"))
         resume = None
@@ -91,6 +94,7 @@ def build_interview_creation_graph(
         state: InterviewCreationState,
         runtime: Runtime[InterviewCreationRuntimeContext],
     ) -> InterviewCreationState:
+        # 蓝图只是受控命令；幂等、开场题生成和持久化仍由 Java 完成。
         request = state["request"]
         blueprint = state["blueprint"]
         if blueprint is None:

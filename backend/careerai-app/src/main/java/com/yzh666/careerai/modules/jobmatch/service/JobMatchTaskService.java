@@ -20,6 +20,11 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
+/**
+ * 岗位匹配异步任务入口。
+ * 这里负责用户数据校验、任务幂等和消息投递，真正的模型分析由消费者调用
+ * {@link JobMatchService} 完成。
+ */
 @Service
 @RequiredArgsConstructor
 public class JobMatchTaskService {
@@ -42,6 +47,7 @@ public class JobMatchTaskService {
       String idempotencyKey
   ) {
     Long userId = currentUserService.currentUserId();
+    // Agent 恢复时可能重复调用写 Tool，先按“用户 + 任务类型 + 幂等键”返回已有任务。
     return taskRepository.findByUserIdAndTaskTypeAndAgentIdempotencyKey(
         userId,
         AiAnalysisTaskType.JOB_MATCH,
@@ -86,6 +92,7 @@ public class JobMatchTaskService {
 
     JobMatchRabbitProducer producer = producerProvider.getIfAvailable();
     if (producer == null) {
+      // 本地未启用 RabbitMQ 时仍保持相同任务状态语义，只把执行方式降级为同步。
       saved.setStatus(AsyncTaskStatus.PROCESSING);
       taskRepository.save(saved);
       JobMatchReportDTO report = jobMatchService.createReportForUser(

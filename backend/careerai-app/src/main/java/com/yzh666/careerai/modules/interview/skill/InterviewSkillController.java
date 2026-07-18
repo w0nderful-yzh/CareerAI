@@ -5,7 +5,6 @@ import com.yzh666.careerai.common.result.Result;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -26,11 +25,6 @@ public class InterviewSkillController {
     @GetMapping
     public Result<List<InterviewSkillService.SkillDTO>> listSkills() {
         return Result.success(skillService.getAllSkills());
-    }
-
-    @GetMapping("/{id}")
-    public Result<InterviewSkillService.SkillDTO> getSkill(@PathVariable String id) {
-        return Result.success(skillService.getSkill(id));
     }
 
     @PostMapping("/parse-jd")

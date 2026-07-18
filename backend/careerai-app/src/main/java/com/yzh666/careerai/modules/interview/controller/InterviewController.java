@@ -1,7 +1,6 @@
 package com.yzh666.careerai.modules.interview.controller;
 
 import com.yzh666.careerai.common.result.Result;
-import com.yzh666.careerai.modules.interview.model.AbilityProfileItemDTO;
 import com.yzh666.careerai.modules.interview.model.InterviewDetailDTO;
 import com.yzh666.careerai.modules.interview.model.InterviewClosureDTO;
 import com.yzh666.careerai.modules.interview.model.InterviewSessionDTO;
@@ -9,7 +8,6 @@ import com.yzh666.careerai.modules.interview.model.SessionListItemDTO;
 import com.yzh666.careerai.modules.interview.service.InterviewHistoryService;
 import com.yzh666.careerai.modules.interview.service.InterviewPersistenceService;
 import com.yzh666.careerai.modules.interview.service.InterviewSessionService;
-import com.yzh666.careerai.modules.interview.service.AbilityProfileService;
 import com.yzh666.careerai.modules.interview.service.InterviewClosureService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -40,14 +38,7 @@ public class InterviewController {
     private final InterviewSessionService sessionService;
     private final InterviewHistoryService historyService;
     private final InterviewPersistenceService persistenceService;
-    private final AbilityProfileService abilityProfileService;
     private final InterviewClosureService interviewClosureService;
-
-    /** 读取当前用户跨场次沉淀的能力画像及最新证据。 */
-    @GetMapping("/api/interview/ability-profile")
-    public Result<List<AbilityProfileItemDTO>> getAbilityProfile() {
-        return Result.success(abilityProfileService.getCurrentProfile());
-    }
 
     /** 查询报告生成后幂等落库的结束总结和改进任务。 */
     @GetMapping("/api/interview/sessions/{sessionId}/closure")

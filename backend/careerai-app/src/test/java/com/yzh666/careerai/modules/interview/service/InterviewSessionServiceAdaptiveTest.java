@@ -11,7 +11,6 @@ import static org.mockito.Mockito.when;
 import com.yzh666.careerai.common.agent.tool.AgentInterviewTurnCommand;
 import com.yzh666.careerai.common.agent.tool.AgentInterviewTurnEvaluation;
 import com.yzh666.careerai.common.agent.tool.AgentNextQuestionIntent;
-import com.yzh666.careerai.common.ai.LlmProviderRegistry;
 import com.yzh666.careerai.common.exception.BusinessException;
 import com.yzh666.careerai.infrastructure.redis.InterviewSessionCache;
 import com.yzh666.careerai.infrastructure.redis.InterviewSessionCache.CachedSession;
@@ -39,21 +38,15 @@ class InterviewSessionServiceAdaptiveTest {
   @Mock
   private InterviewQuestionService questionService;
   @Mock
-  private AnswerEvaluationService evaluationService;
-  @Mock
   private InterviewPersistenceService persistenceService;
   @Mock
   private InterviewSessionCache sessionCache;
   @Mock
   private EvaluateStreamProducer evaluateStreamProducer;
   @Mock
-  private LlmProviderRegistry llmProviderRegistry;
-  @Mock
   private JobMatchService jobMatchService;
   @Mock
   private AbilityProfileService abilityProfileService;
-  @Mock
-  private InterviewClosureService interviewClosureService;
 
   private ObjectMapper objectMapper;
   private InterviewSessionService service;
@@ -63,15 +56,12 @@ class InterviewSessionServiceAdaptiveTest {
     objectMapper = new ObjectMapper();
     service = new InterviewSessionService(
         questionService,
-        evaluationService,
         persistenceService,
         sessionCache,
         objectMapper,
         evaluateStreamProducer,
-        llmProviderRegistry,
         jobMatchService,
-        abilityProfileService,
-        interviewClosureService
+        abilityProfileService
     );
   }
 
