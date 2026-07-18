@@ -157,23 +157,6 @@ public class InterviewPersistenceService {
     }
     
     /**
-     * 更新会话状态
-     */
-    @Transactional(rollbackFor = Exception.class)
-    public void updateSessionStatus(String sessionId, InterviewSessionEntity.SessionStatus status) {
-        Optional<InterviewSessionEntity> sessionOpt = findBySessionId(sessionId);
-        if (sessionOpt.isPresent()) {
-            InterviewSessionEntity session = sessionOpt.get();
-            session.setStatus(status);
-            if (status == InterviewSessionEntity.SessionStatus.COMPLETED ||
-                status == InterviewSessionEntity.SessionStatus.EVALUATED) {
-                session.setCompletedAt(LocalDateTime.now());
-            }
-            sessionRepository.save(session);
-        }
-    }
-
-    /**
      * 更新评估状态
      */
     @Transactional(rollbackFor = Exception.class)
@@ -206,17 +189,6 @@ public class InterviewPersistenceService {
         }
     }
     
-    /**
-     * 保存面试答案
-     */
-    @Transactional(rollbackFor = Exception.class)
-    public InterviewAnswerEntity saveAnswer(String sessionId, int questionIndex,
-                                            String question, String category,
-                                            String userAnswer, int score, String feedback) {
-        return saveTurn(sessionId, questionIndex, question, category, userAnswer, score, feedback,
-            null, null, null);
-    }
-
     @Transactional(rollbackFor = Exception.class)
     public InterviewAnswerEntity saveAdaptiveTurn(
             String sessionId,

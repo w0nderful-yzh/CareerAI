@@ -4,7 +4,6 @@ import com.yzh666.careerai.common.annotation.RateLimit;
 import com.yzh666.careerai.common.result.Result;
 import com.yzh666.careerai.modules.resume.model.ResumeDetailDTO;
 import com.yzh666.careerai.modules.resume.model.ResumeListItemDTO;
-import com.yzh666.careerai.modules.resume.model.ResumeStatsDTO;
 import com.yzh666.careerai.modules.resume.service.ResumeDeleteService;
 import com.yzh666.careerai.modules.resume.service.ResumeHistoryService;
 import com.yzh666.careerai.modules.resume.service.ResumeUploadService;
@@ -69,15 +68,6 @@ public class ResumeController {
     }
 
     /**
-     * 获取简历统计信息
-     */
-    @GetMapping("/api/resumes/statistics")
-    public Result<ResumeStatsDTO> getStatistics() {
-        ResumeStatsDTO statistics = historyService.getStatistics();
-        return Result.success(statistics);
-    }
-
-    /**
      * 获取简历详情（包含分析历史）
      */
     @GetMapping("/api/resumes/{id}/detail")
@@ -130,17 +120,6 @@ public class ResumeController {
     public Result<Void> reanalyze(@PathVariable Long id) {
         uploadService.reanalyze(id);
         return Result.success(null);
-    }
-
-    /**
-     * 健康检查接口
-     */
-    @GetMapping("/api/resumes/health")
-    public Result<Map<String, String>> health() {
-        return Result.success(Map.of(
-            "status", "UP",
-            "service", "CareerAI Resume Service"
-        ));
     }
 
 }

@@ -224,12 +224,6 @@ export const request = {
     return resolveBlobDownload(response.data);
   },
 
-  /**
-   * 获取原始实例（用于特殊场景如下载 Blob）
-   */
-  getInstance(): AxiosInstance {
-    return instance;
-  },
 };
 
 /**

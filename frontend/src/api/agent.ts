@@ -22,10 +22,6 @@ export const agentApi = {
     });
   },
 
-  getRun(runId: string) {
-    return request.get<AgentRun>(`/api/agent/runs/${runId}`);
-  },
-
   resumeRun(runId: string) {
     return request.post<AgentRun>(`/api/agent/runs/${runId}/resume`, undefined, {
       timeout: 180000,

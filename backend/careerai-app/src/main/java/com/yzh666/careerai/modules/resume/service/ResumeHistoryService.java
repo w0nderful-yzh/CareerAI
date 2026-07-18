@@ -12,7 +12,6 @@ import com.yzh666.careerai.modules.resume.model.ResumeAnalysisEntity;
 import com.yzh666.careerai.modules.resume.model.ResumeDetailDTO;
 import com.yzh666.careerai.modules.resume.model.ResumeEntity;
 import com.yzh666.careerai.modules.resume.model.ResumeListItemDTO;
-import com.yzh666.careerai.modules.resume.model.ResumeStatsDTO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -74,27 +73,6 @@ public class ResumeHistoryService {
                 resume.getAnalyzeError()
             );
         }).toList();
-    }
-
-    /**
-     * 获取简历统计信息
-     */
-    public ResumeStatsDTO getStatistics() {
-        List<ResumeListItemDTO> resumes = getAllResumes();
-        int totalInterviewCount = resumes.stream()
-            .map(ResumeListItemDTO::interviewCount)
-            .mapToInt(count -> count == null ? 0 : count)
-            .sum();
-        int totalAccessCount = resumes.stream()
-            .map(ResumeListItemDTO::accessCount)
-            .mapToInt(count -> count == null ? 0 : count)
-            .sum();
-
-        return new ResumeStatsDTO(
-            resumes.size(),
-            totalInterviewCount,
-            totalAccessCount
-        );
     }
 
     /**

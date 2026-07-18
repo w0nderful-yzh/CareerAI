@@ -9,16 +9,12 @@ import org.springframework.ai.model.openai.autoconfigure.OpenAiModerationAutoCon
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
-import org.springframework.cloud.openfeign.EnableFeignClients;
-import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
  * CareerAI - Main Application
  * 智能AI面试官平台 - 主启动类
  */
-@EnableScheduling
 @EnableDiscoveryClient
-@EnableFeignClients
 @SpringBootApplication(exclude = {
     OpenAiAudioSpeechAutoConfiguration.class,
     OpenAiAudioTranscriptionAutoConfiguration.class,

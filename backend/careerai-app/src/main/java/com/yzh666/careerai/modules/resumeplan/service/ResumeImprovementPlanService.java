@@ -16,7 +16,6 @@ import com.yzh666.careerai.modules.jobmatch.model.JobMatchReportEntity;
 import com.yzh666.careerai.modules.jobmatch.repository.JobMatchReportRepository;
 import com.yzh666.careerai.modules.resume.model.ResumeEntity;
 import com.yzh666.careerai.modules.resume.repository.ResumeRepository;
-import com.yzh666.careerai.modules.resumeplan.dto.CreateResumeImprovementPlanRequest;
 import com.yzh666.careerai.modules.resumeplan.dto.PreparationTaskDTO;
 import com.yzh666.careerai.modules.resumeplan.dto.ResumeImprovementPlanDTO;
 import com.yzh666.careerai.modules.resumeplan.model.ResumeImprovementPlanEntity;
@@ -125,11 +124,6 @@ public class ResumeImprovementPlanService {
         ResumeImprovementPlanEntity plan = planRepository.findByIdAndUserId(id, userId)
             .orElseThrow(() -> new BusinessException(ErrorCode.RESUME_PLAN_NOT_FOUND));
         return toDTO(plan);
-    }
-
-    public ResumeImprovementPlanDTO createPlan(CreateResumeImprovementPlanRequest request) {
-        Long userId = currentUserService.currentUserId();
-        return createPlan(request.matchReportId(), userId, null, null);
     }
 
     public ResumeImprovementPlanDTO createPlanIdempotently(

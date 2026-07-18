@@ -17,12 +17,6 @@ export interface ResumeListItem {
   storageUrl?: string;
 }
 
-export interface ResumeStats {
-  totalCount: number;
-  totalInterviewCount: number;
-  totalAccessCount: number;
-}
-
 export interface AnalysisItem {
   id: number;
   overallScore: number;
@@ -217,13 +211,6 @@ export const historyApi = {
    */
   async deleteInterview(sessionId: string): Promise<void> {
     return request.delete(`/api/interview/sessions/${sessionId}`);
-  },
-
-  /**
-   * 获取简历统计信息
-   */
-  async getStatistics(): Promise<ResumeStats> {
-    return request.get<ResumeStats>('/api/resumes/statistics');
   },
 
   /**
